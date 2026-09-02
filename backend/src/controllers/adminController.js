@@ -135,3 +135,49 @@ exports.getAllBookings = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.approveCaptain = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Captain not found" });
+    }
+    user.isApproved = true;
+    user.status = "available";
+    await user.save();
+
+    await CaptainProfile.findOneAndUpdate(
+      { user: id },
+      { status: "available" }
+    );
+
+    res.json({ success: true, message: "Captain approved successfully", user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.rejectCaptain = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Captain not found" });
+    }
+    user.isRejected = true;
+    user.status = "rejected";
+    user.rejectionReason = reason || "KYC verification failed.";
+    await user.save();
+
+    await CaptainProfile.findOneAndUpdate(
+      { user: id },
+      { status: "rejected" }
+    );
+
+    res.json({ success: true, message: "Captain application rejected", user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

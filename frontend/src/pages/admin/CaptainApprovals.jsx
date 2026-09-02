@@ -27,6 +27,49 @@ export default function CaptainApprovals() {
   });
 
   useEffect(() => {
+    const fetchApiCaptains = async () => {
+      try {
+        const res = await api.get('/admin/captains');
+        if (res.data?.success && Array.isArray(res.data.captains)) {
+          const apiCaps = res.data.captains.map(c => {
+            const u = c.user || c;
+            return {
+              _id: u._id || c._id,
+              name: u.name,
+              email: u.email,
+              phone: u.phone,
+              role: 'captain',
+              avatar: u.avatar,
+              city: u.city || 'Bhubaneswar',
+              status: c.status || u.status || (c.isApproved ? 'available' : 'pending_approval'),
+              isApproved: c.isApproved !== undefined ? c.isApproved : (c.status === 'available' || c.status === 'active'),
+              isRejected: c.isRejected || u.isRejected || false,
+              vehicleDetails: c.vehicle || u.vehicleDetails || { model: 'Registered Vehicle', numberPlate: 'OD-02-NEW', category: 'bike' },
+              licenseNumber: c.licenseNumber || u.licenseNumber || 'DL-2026-VERIFIED',
+              submittedAt: u.createdAt || c.createdAt || new Date().toISOString()
+            };
+          });
+
+          // Merge API captains into local list (avoiding duplicates)
+          const raw = localStorage.getItem('fleetcorp_registered_users');
+          const localList = raw ? JSON.parse(raw) : [];
+          const merged = [...localList];
+          apiCaps.forEach(ac => {
+            const idx = merged.findIndex(m => (m.email && m.email === ac.email) || (m.phone && m.phone === ac.phone));
+            if (idx >= 0) {
+              merged[idx] = { ...merged[idx], ...ac };
+            } else {
+              merged.push(ac);
+            }
+          });
+          setLocalUsersState(merged);
+          localStorage.setItem('fleetcorp_registered_users', JSON.stringify(merged));
+        }
+      } catch (e) {}
+    };
+
+    fetchApiCaptains();
+
     const handleStorageSync = () => {
       try {
         const raw = localStorage.getItem('fleetcorp_registered_users');
@@ -89,7 +132,7 @@ export default function CaptainApprovals() {
   };
 
   // Action: Approve Captain & Dispatch Official Activation Email
-  const handleApproveCaptain = (cap) => {
+  const handleApproveCaptain = async (cap) => {
     const approvalTimestamp = new Date().toISOString();
     const updated = localUsersState.map(u => {
       const match = (u.email && u.email === cap.email) || (u.phone && u.phone === cap.phone);
@@ -108,6 +151,13 @@ export default function CaptainApprovals() {
     });
 
     saveUpdatedUsers(updated);
+
+    // Call Cloud Backend API to update MongoDB in real-time
+    if (cap._id && !cap._id.startsWith('loc_')) {
+      try {
+        await api.put(`/admin/captains/${cap._id}/approve`);
+      } catch (e) {}
+    }
 
     // Save official email record in captain's inbox
     const emailPayload = {
@@ -140,7 +190,7 @@ export default function CaptainApprovals() {
   };
 
   // Action: Reject Captain
-  const handleConfirmReject = () => {
+  const handleConfirmReject = async () => {
     if (!rejectModalTarget) return;
     const updated = localUsersState.map(u => {
       const match = (u.email && u.email === rejectModalTarget.email) || (u.phone && u.phone === rejectModalTarget.phone);
@@ -159,6 +209,14 @@ export default function CaptainApprovals() {
     });
 
     saveUpdatedUsers(updated);
+
+    // Call Cloud Backend API to reject in MongoDB
+    if (rejectModalTarget._id && !rejectModalTarget._id.startsWith('loc_')) {
+      try {
+        await api.put(`/admin/captains/${rejectModalTarget._id}/reject`, { reason: rejectionReason });
+      } catch (e) {}
+    }
+
     setRejectModalTarget(null);
     setToastNotice({
       type: 'error',
