@@ -59,6 +59,13 @@ exports.register = async (req, res) => {
         avatar: avatar || defaultAvatar
       });
     } catch (e) {
+      console.error("User.create failed:", e.message);
+      if (e.code === 11000) {
+        return res.status(400).json({
+          success: false,
+          message: "An account with this email address or mobile number is already registered. Please sign in."
+        });
+      }
       user = {
         _id: "usr_" + Date.now(),
         name,
