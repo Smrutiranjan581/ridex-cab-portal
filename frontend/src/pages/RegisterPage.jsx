@@ -9,7 +9,16 @@ import Navbar from '../components/common/Navbar';
 import Footer from '../components/common/Footer';
 
 export default function RegisterPage() {
-  const [role, setRole] = useState('rider');
+  const [role, setRole] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlRole = params.get('role');
+      if (urlRole === 'captain') return 'captain';
+      return 'rider';
+    } catch (e) {
+      return 'rider';
+    }
+  });
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
