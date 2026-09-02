@@ -414,11 +414,31 @@ export const AuthProvider = ({ children }) => {
 
       saveLocalRegisteredUser(userData, formData.password, capData);
 
+      // Save persistent Admin notification if captain registered
+      if (formData.role === 'captain') {
+        try {
+          const adminNotifsKey = 'ridex_user_notifications_admin@cab.com';
+          const existingRaw = localStorage.getItem(adminNotifsKey);
+          const existing = existingRaw ? JSON.parse(existingRaw) : [];
+          const newAdminNotif = {
+            id: 'cap_app_' + Date.now(),
+            title: `🚨 New Captain Application: ${formData.name}`,
+            desc: `${formData.vehicleDetails?.category?.toUpperCase() || 'VEHICLE'} (${formData.vehicleDetails?.numberPlate || 'OD-02-APPLIED'}) • ${formData.city || 'Bhubaneswar'} is waiting for KYC Approval.`,
+            type: 'captain_application',
+            time: 'Just now',
+            createdAt: new Date().toISOString(),
+            link: '/admin/approvals'
+          };
+          localStorage.setItem(adminNotifsKey, JSON.stringify([newAdminNotif, ...existing]));
+        } catch (e) {}
+      }
+
       // Broadcast update to Admin dashboard in real time
       if ('BroadcastChannel' in window) {
         try {
           const ch = new BroadcastChannel('ridex_dispatch_channel');
           ch.postMessage({ type: 'CAPTAIN_STATUS_CHANGE', captain: userData });
+          ch.postMessage({ type: 'NEW_CAPTAIN_APPLICATION', captain: userData });
           ch.close();
         } catch (e) {}
       }

@@ -585,6 +585,32 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          {/* Pending Captain Registrations Alert Banner */}
+          {localUsersState.filter(u => u.role === 'captain' && (u.isApproved === false || u.status === 'pending_approval')).length > 0 && (
+            <div className="p-5 rounded-3xl bg-amber-500/10 border-2 border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg animate-pulse">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 font-black flex items-center justify-center shrink-0 shadow-md">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-black text-slate-900 dark:text-white text-base flex items-center gap-2">
+                    🚨 {localUsersState.filter(u => u.role === 'captain' && (u.isApproved === false || u.status === 'pending_approval')).length} New Captain Application(s) Pending Verification!
+                  </h4>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                    Review newly submitted driver KYC, commercial vehicle number plate & driving license to activate captain duty.
+                  </p>
+                </div>
+              </div>
+              <Link 
+                to="/admin/approvals" 
+                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-all shadow-md shrink-0 flex items-center gap-2"
+              >
+                <span>Review & Approve Now</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          )}
+
           {/* Admin KPI Stats (100% Real Live Computed) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
