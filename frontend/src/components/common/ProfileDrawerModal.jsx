@@ -555,9 +555,60 @@ export default function ProfileDrawerModal({ onClose }) {
     }
   };
 
-  const userPhone = user?.phone || "7894695441";
-  const userName = user?.name || "Smrutiranjan Nayak";
-  const userEmail = user?.email || "smruti@fleetcorp.com";
+  const getDynamicUserDetails = () => {
+    let name = user?.name;
+    let phone = user?.phone;
+    let email = user?.email;
+    let avatar = user?.avatar;
+
+    // Search in registered users database/localStorage
+    try {
+      const rawUsers = localStorage.getItem('fleetcorp_registered_users');
+      if (rawUsers) {
+        const usersList = JSON.parse(rawUsers);
+        const cleanPhone = (phone || '').replace(/[^0-9]/g, '').slice(-10);
+        const cleanEmail = (email || '').trim().toLowerCase();
+        const matched = usersList.find(u => {
+          const emailMatch = cleanEmail && u.email && u.email.toLowerCase() === cleanEmail;
+          const phoneMatch = cleanPhone && (u.phone || '').replace(/[^0-9]/g, '').slice(-10) === cleanPhone;
+          return emailMatch || phoneMatch;
+        });
+
+        if (matched) {
+          if (!name || name === 'Rider' || name === 'Captain' || name === 'User') name = matched.name;
+          if (!phone) phone = matched.phone;
+          if (!email) email = matched.email;
+          if (!avatar && matched.avatar) avatar = matched.avatar;
+        }
+      }
+    } catch (e) {}
+
+    // Check stored user object
+    if (!name || name === 'Rider' || name === 'Captain' || name === 'User') {
+      try {
+        const saved = sessionStorage.getItem('fleetcorp_user') || localStorage.getItem('fleetcorp_user');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.name && parsed.name !== 'Rider' && parsed.name !== 'Captain') name = parsed.name;
+          if (parsed.phone && !phone) phone = parsed.phone;
+          if (parsed.email && !email) email = parsed.email;
+        }
+      } catch (e) {}
+    }
+
+    return {
+      name: name || "Smrutiranjan Nayak",
+      phone: phone || "7894695441",
+      email: email || "smruti@fleetcorp.com",
+      avatar: avatar || user?.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80"
+    };
+  };
+
+  const dynamicUser = getDynamicUserDetails();
+  const userPhone = dynamicUser.phone;
+  const userName = dynamicUser.name;
+  const userEmail = dynamicUser.email;
+  const userAvatar = dynamicUser.avatar;
   const userRole = user?.role || "rider";
   const isCaptain = userRole === 'captain' || user?.role === 'captain';
 
@@ -994,8 +1045,8 @@ export default function ProfileDrawerModal({ onClose }) {
             >
               <div className="flex items-center gap-3.5">
                 <div className="w-12 h-12 rounded-full ring-2 ring-amber-500 bg-amber-500/10 flex items-center justify-center text-xl overflow-hidden shrink-0">
-                  {user?.avatar ? (
-                    <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
+                  {userAvatar ? (
+                    <img src={userAvatar} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
                     "👨‍💼"
                   )}
