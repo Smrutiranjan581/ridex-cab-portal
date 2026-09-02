@@ -144,7 +144,7 @@ export default function RegisterPage() {
       email,
       phone,
       password,
-      role,
+      role: role === 'captain' ? 'captain' : 'rider',
       city: city || 'Bhubaneswar',
       company: role === 'rider' ? 'Individual Rider' : 'RideX Captain Network',
       avatar: photo || defaultAvatar,

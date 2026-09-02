@@ -42,7 +42,8 @@ exports.register = async (req, res) => {
       });
     }
 
-    const defaultAvatar = role === 'captain' 
+    const cleanRole = role === 'captain' ? 'captain' : 'rider';
+    const defaultAvatar = cleanRole === 'captain' 
       ? "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80" 
       : "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80";
 
@@ -53,8 +54,8 @@ exports.register = async (req, res) => {
         email: cleanEmail,
         phone,
         password,
-        role: role || "rider",
-        company: company || "Corporate Partner",
+        role: cleanRole,
+        company: company || (cleanRole === 'captain' ? "RideX Captain Network" : "Individual Rider"),
         avatar: avatar || defaultAvatar
       });
     } catch (e) {
@@ -64,8 +65,8 @@ exports.register = async (req, res) => {
         email: cleanEmail,
         phone,
         password,
-        role: role || "rider",
-        company: company || "Corporate Partner",
+        role: cleanRole,
+        company: company || (cleanRole === 'captain' ? "RideX Captain Network" : "Individual Rider"),
         avatar: avatar || defaultAvatar,
         walletBalance: 1500
       };
@@ -135,7 +136,8 @@ exports.login = async (req, res) => {
       user = await User.findOne({
         $or: [
           { email: cleanInput.toLowerCase() },
-          cleanPhoneDigits ? { phone: { $regex: cleanPhoneDigits } } : null
+          cleanPhoneDigits ? { phone: cleanPhoneDigits } : null,
+          { phone: cleanInput }
         ].filter(Boolean)
       }).select("+password");
     } catch (e) {}
@@ -143,12 +145,12 @@ exports.login = async (req, res) => {
     const mockAccounts = {
       "admin@cab.com": { _id: "admin_123", name: "Corporate Admin", role: "admin", company: "FleetCorp HQ", walletBalance: 0, phone: "9876543210" },
       "rider@cab.com": { _id: "rider_123", name: "Rahul Sharma", role: "rider", company: "TCS Campus", walletBalance: 2450, phone: "9437088776" },
-      "captain@cab.com": { _id: "captain_123", name: "Rajesh Mohapatra", role: "captain", company: "Fleet Captain", walletBalance: 0, phone: "9123456780" }
+      "captain@cab.com": { _id: "captain_123", name: "Rajesh Mohapatra", role: "captain", company: "Fleet Driver", walletBalance: 0, phone: "9123456780" }
     };
 
     if (!user) {
       const matchMock = Object.values(mockAccounts).find(
-        m => (m.email.toLowerCase() === cleanInput.toLowerCase() || (cleanPhoneDigits && m.phone.includes(cleanPhoneDigits))) && password === "password123"
+        m => (m.email.toLowerCase() === cleanInput.toLowerCase() || (cleanPhoneDigits && m.phone === cleanPhoneDigits) || m.phone === cleanInput) && password === "password123"
       );
 
       if (matchMock) {

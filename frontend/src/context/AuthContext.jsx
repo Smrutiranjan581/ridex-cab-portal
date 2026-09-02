@@ -99,14 +99,13 @@ export const AuthProvider = ({ children }) => {
     const cleanDigits = cleanIdentifier.replace(/[^0-9]/g, '');
     const cleanPass = (password || '').trim();
 
-    // 1. Instant check for Admin login
+    // 1. Instant check for Admin demo (strictly exact)
     const isAdminIdentifier = cleanIdentifier === 'admin' || 
                               cleanIdentifier === 'admin@cab.com' || 
                               cleanIdentifier === 'admin@ridex.com' || 
-                              cleanIdentifier.includes('admin') || 
-                              cleanDigits === '9876543210';
+                              (cleanDigits === '9876543210' && cleanPass === 'password123');
     
-    if (isAdminIdentifier && (cleanPass === 'password123' || cleanPass === 'admin' || cleanPass === 'admin123' || cleanPass.length > 0)) {
+    if (isAdminIdentifier && (cleanPass === 'password123' || cleanPass === 'admin' || cleanPass === 'admin123')) {
       const adminUser = {
         _id: 'admin_123',
         name: 'Corporate Admin',
@@ -121,14 +120,15 @@ export const AuthProvider = ({ children }) => {
       setToken(demoToken);
       setUser(adminUser);
       setCaptainProfile(null);
+      sessionStorage.removeItem('fleetcorp_captain');
       sessionStorage.setItem('token', demoToken);
       sessionStorage.setItem('fleetcorp_user', JSON.stringify(adminUser));
       return { success: true, user: adminUser };
     }
 
-    // 2. Instant check for Captain demo
-    const isCaptainIdentifier = cleanIdentifier === 'captain' || cleanIdentifier === 'captain@cab.com' || cleanDigits === '9123456780';
-    if (isCaptainIdentifier && (cleanPass === 'password123' || cleanPass === 'captain' || cleanPass === 'captain123' || cleanPass.length > 0)) {
+    // 2. Instant check for Captain demo (strictly exact)
+    const isCaptainIdentifier = cleanIdentifier === 'captain' || cleanIdentifier === 'captain@cab.com' || (cleanDigits === '9123456780' && cleanPass === 'password123');
+    if (isCaptainIdentifier && (cleanPass === 'password123' || cleanPass === 'captain' || cleanPass === 'captain123')) {
       const captainUser = {
         _id: 'captain_123',
         name: 'Rajesh Mohapatra',
@@ -156,9 +156,9 @@ export const AuthProvider = ({ children }) => {
       return { success: true, user: captainUser };
     }
 
-    // 3. Instant check for Rider demo
-    const isRiderIdentifier = cleanIdentifier === 'rider' || cleanIdentifier === 'rider@cab.com' || cleanDigits === '9437088776';
-    if (isRiderIdentifier && (cleanPass === 'password123' || cleanPass === 'rider' || cleanPass === 'rider123' || cleanPass.length > 0)) {
+    // 3. Instant check for Rider demo (strictly exact)
+    const isRiderIdentifier = cleanIdentifier === 'rider' || cleanIdentifier === 'rider@cab.com' || (cleanDigits === '9437088776' && cleanPass === 'password123');
+    if (isRiderIdentifier && (cleanPass === 'password123' || cleanPass === 'rider' || cleanPass === 'rider123')) {
       const riderUser = {
         _id: 'rider_123',
         name: 'Rahul Sharma',
@@ -173,6 +173,7 @@ export const AuthProvider = ({ children }) => {
       setToken(demoToken);
       setUser(riderUser);
       setCaptainProfile(null);
+      sessionStorage.removeItem('fleetcorp_captain');
       sessionStorage.setItem('token', demoToken);
       sessionStorage.setItem('fleetcorp_user', JSON.stringify(riderUser));
       return { success: true, user: riderUser };
@@ -248,7 +249,7 @@ export const AuthProvider = ({ children }) => {
         return emailMatch || phoneMatch;
       });
 
-      if (matched && (!matched.password || matched.password === cleanPass || cleanPass.length > 0)) {
+      if (matched && (matched.password === cleanPass || !matched.password)) {
         if (matched.isDeactivated || matched.status === 'deactivated') {
           return {
             success: false,
