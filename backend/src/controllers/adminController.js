@@ -11,12 +11,22 @@ exports.getAdminDashboard = async (req, res) => {
     let totalRiders = 0;
     let recentBookings = [];
     let captainsList = [];
+    let ridersList = [];
 
     try {
       totalBookings = await Booking.countDocuments();
       completedTrips = await Booking.countDocuments({ status: "trip_completed" });
       activeCaptains = await CaptainProfile.countDocuments({ status: "available" });
-      totalRiders = await User.countDocuments({ role: "rider" });
+      totalRiders = await User.countDocuments({
+        $or: [
+          { role: "rider" },
+          { role: "user" },
+          { role: "passenger" },
+          { role: { $exists: false } },
+          { role: null }
+        ],
+        email: { $nin: ["admin@cab.com", "captain@cab.com"] }
+      });
       
       const revenueAgg = await Booking.aggregate([
         { $match: { status: "trip_completed" } },
@@ -30,7 +40,18 @@ exports.getAdminDashboard = async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(8);
 
-      captainsList = await CaptainProfile.find().populate("user", "name email phone avatar").limit(10);
+      captainsList = await CaptainProfile.find().populate("user", "name email phone avatar company createdAt").sort({ createdAt: -1 }).limit(10);
+      
+      ridersList = await User.find({
+        $or: [
+          { role: "rider" },
+          { role: "user" },
+          { role: "passenger" },
+          { role: { $exists: false } },
+          { role: null }
+        ],
+        email: { $nin: ["admin@cab.com", "captain@cab.com"] }
+      }).select("-password").sort({ createdAt: -1 }).limit(10);
     } catch (e) {}
 
     res.json({
@@ -53,7 +74,8 @@ exports.getAdminDashboard = async (req, res) => {
         ]
       },
       recentBookings,
-      captainsList
+      captainsList,
+      ridersList
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -64,7 +86,7 @@ exports.getAllCaptains = async (req, res) => {
   try {
     let captains = [];
     try {
-      captains = await CaptainProfile.find().populate("user", "name email phone avatar company createdAt");
+      captains = await CaptainProfile.find().populate("user", "name email phone avatar company createdAt").sort({ createdAt: -1 });
     } catch (e) {}
 
     // Return strictly real captains from database
@@ -78,7 +100,16 @@ exports.getAllRiders = async (req, res) => {
   try {
     let riders = [];
     try {
-      riders = await User.find({ role: "rider" }).select("-password");
+      riders = await User.find({
+        $or: [
+          { role: "rider" },
+          { role: "user" },
+          { role: "passenger" },
+          { role: { $exists: false } },
+          { role: null }
+        ],
+        email: { $nin: ["admin@cab.com", "captain@cab.com"] }
+      }).select("-password").sort({ createdAt: -1 });
     } catch (e) {}
 
     // Return strictly real riders from database

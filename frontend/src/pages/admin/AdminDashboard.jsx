@@ -58,13 +58,13 @@ export default function AdminDashboard() {
         ]);
 
         if (dashRes.status === 'fulfilled' && dashRes.value.data.success) {
-          setDashboardData(dashRes.value.data.dashboard);
+          setDashboardData(dashRes.value.data.stats || dashRes.value.data.dashboard);
         }
         if (capRes.status === 'fulfilled' && capRes.value.data.success) {
-          setCaptains(capRes.value.data.captains);
+          setCaptains(capRes.value.data.captains || []);
         }
         if (riderRes.status === 'fulfilled' && riderRes.value.data.success) {
-          setRiders(riderRes.value.data.riders);
+          setRiders(riderRes.value.data.riders || []);
         }
       } catch (err) {
         console.error("Admin dashboard data fetch error", err);
@@ -73,6 +73,7 @@ export default function AdminDashboard() {
       }
     };
     fetchAdminData();
+    const interval = setInterval(fetchAdminData, 6000);
 
     // Listen for real-time duty status changes from Captains
     const handleStorageSync = () => {
@@ -89,11 +90,13 @@ export default function AdminDashboard() {
       channel.onmessage = (msg) => {
         if (msg.data?.type === 'CAPTAIN_STATUS_CHANGE') {
           handleStorageSync();
+          fetchAdminData();
         }
       };
     }
 
     return () => {
+      clearInterval(interval);
       window.removeEventListener('storage', handleStorageSync);
       if (channel) channel.close();
     };
@@ -209,7 +212,9 @@ export default function AdminDashboard() {
       const rdName = (rd.name || '').trim().toLowerCase();
       const rEmail = (r.email || '').trim().toLowerCase();
       const rdEmail = (rd.email || '').trim().toLowerCase();
-      return (rName && rName === rdName) || (rEmail && rEmail === rdEmail);
+      const rPhone = (r.phone || '').replace(/[^0-9]/g, '').slice(-10);
+      const rdPhone = (rd.phone || '').replace(/[^0-9]/g, '').slice(-10);
+      return (rEmail && rEmail === rdEmail) || (rPhone && rPhone === rdPhone) || (rName && rName === rdName);
     }) === idx
   );
 

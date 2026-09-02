@@ -24,13 +24,15 @@ export default function ManageRiders() {
       try {
         const res = await api.get('/admin/riders');
         if (res.data.success) {
-          setRiders(res.data.riders);
+          setRiders(res.data.riders || []);
         }
       } catch (err) {
         console.log("Using local real riders");
       }
     };
     fetchRiders();
+    const interval = setInterval(fetchRiders, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   // Extract riders from completed trip records
