@@ -67,10 +67,18 @@ export const AuthProvider = ({ children }) => {
         const res = await api.get('/auth/me');
         if (res.data.success) {
           setUser(res.data.user);
-          setCaptainProfile(res.data.captainProfile);
           sessionStorage.setItem('fleetcorp_user', JSON.stringify(res.data.user));
-          if (res.data.captainProfile) {
-            sessionStorage.setItem('fleetcorp_captain', JSON.stringify(res.data.captainProfile));
+          localStorage.setItem('fleetcorp_user', JSON.stringify(res.data.user));
+          if (res.data.user.role === 'captain') {
+            setCaptainProfile(res.data.captainProfile);
+            if (res.data.captainProfile) {
+              sessionStorage.setItem('fleetcorp_captain', JSON.stringify(res.data.captainProfile));
+              localStorage.setItem('fleetcorp_captain', JSON.stringify(res.data.captainProfile));
+            }
+          } else {
+            setCaptainProfile(null);
+            sessionStorage.removeItem('fleetcorp_captain');
+            localStorage.removeItem('fleetcorp_captain');
           }
         }
       } catch (err) {
@@ -84,6 +92,7 @@ export const AuthProvider = ({ children }) => {
           } else {
             setCaptainProfile(null);
             sessionStorage.removeItem('fleetcorp_captain');
+            localStorage.removeItem('fleetcorp_captain');
           }
         }
       } finally {
@@ -228,16 +237,22 @@ export const AuthProvider = ({ children }) => {
 
         setToken(jwtToken);
         setUser(userData);
+        sessionStorage.setItem('token', jwtToken);
+        localStorage.setItem('token', jwtToken);
+        sessionStorage.setItem('fleetcorp_user', JSON.stringify(userData));
+        localStorage.setItem('fleetcorp_user', JSON.stringify(userData));
+
         if (userData.role === 'captain') {
           setCaptainProfile(capData || null);
-          if (capData) sessionStorage.setItem('fleetcorp_captain', JSON.stringify(capData));
+          if (capData) {
+            sessionStorage.setItem('fleetcorp_captain', JSON.stringify(capData));
+            localStorage.setItem('fleetcorp_captain', JSON.stringify(capData));
+          }
         } else {
           setCaptainProfile(null);
           sessionStorage.removeItem('fleetcorp_captain');
           localStorage.removeItem('fleetcorp_captain');
         }
-        sessionStorage.setItem('token', jwtToken);
-        sessionStorage.setItem('fleetcorp_user', JSON.stringify(userData));
         return { success: true, user: userData };
       }
     } catch (err) {
@@ -307,16 +322,22 @@ export const AuthProvider = ({ children }) => {
         const mockToken = 'jwt_user_' + userObj._id;
         setToken(mockToken);
         setUser(userObj);
+        sessionStorage.setItem('token', mockToken);
+        localStorage.setItem('token', mockToken);
+        sessionStorage.setItem('fleetcorp_user', JSON.stringify(userObj));
+        localStorage.setItem('fleetcorp_user', JSON.stringify(userObj));
+
         if (userObj.role === 'captain') {
           setCaptainProfile(matched.captainProfile || null);
-          if (matched.captainProfile) sessionStorage.setItem('fleetcorp_captain', JSON.stringify(matched.captainProfile));
+          if (matched.captainProfile) {
+            sessionStorage.setItem('fleetcorp_captain', JSON.stringify(matched.captainProfile));
+            localStorage.setItem('fleetcorp_captain', JSON.stringify(matched.captainProfile));
+          }
         } else {
           setCaptainProfile(null);
           sessionStorage.removeItem('fleetcorp_captain');
           localStorage.removeItem('fleetcorp_captain');
         }
-        sessionStorage.setItem('token', mockToken);
-        sessionStorage.setItem('fleetcorp_user', JSON.stringify(userObj));
         return { success: true, user: userObj };
       }
 

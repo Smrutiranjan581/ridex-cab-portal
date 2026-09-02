@@ -9,7 +9,7 @@ const protect = async (req, res, next) => {
       token = req.headers.authorization.split(" ")[1];
 
       // Handle mock/demo/development tokens cleanly
-      if (token === "mock_jwt_token_admin" || token.includes("admin")) {
+      if (token === "mock_jwt_token_admin") {
         req.user = {
           _id: "admin_123",
           role: "admin",
@@ -19,7 +19,7 @@ const protect = async (req, res, next) => {
         return next();
       }
 
-      if (token === "mock_jwt_token_captain" || token.includes("captain")) {
+      if (token === "mock_jwt_token_captain") {
         req.user = {
           _id: "captain_123",
           role: "captain",
@@ -29,13 +29,28 @@ const protect = async (req, res, next) => {
         return next();
       }
 
-      if (token === "mock_jwt_token_rider" || token.includes("rider")) {
+      if (token === "mock_jwt_token_rider") {
         req.user = {
           _id: "rider_123",
           role: "rider",
           name: "Rahul Sharma",
           email: "rider@cab.com"
         };
+        return next();
+      }
+
+      if (token.startsWith("jwt_user_")) {
+        const userId = token.replace("jwt_user_", "");
+        let dbUser = null;
+        try {
+          dbUser = await User.findById(userId).select("-password");
+        } catch (e) {}
+
+        if (dbUser) {
+          req.user = dbUser;
+        } else {
+          req.user = { _id: userId, role: "rider", name: "Rider", email: "rider@ridex.com" };
+        }
         return next();
       }
 
@@ -47,10 +62,6 @@ const protect = async (req, res, next) => {
         const jwtFallback = jwt.decode(token);
         if (jwtFallback && jwtFallback.id) {
           decoded = jwtFallback;
-        } else if (token.startsWith("jwt_user_")) {
-          const userId = token.replace("jwt_user_", "");
-          req.user = { _id: userId, role: "captain", name: "Captain", email: "captain@ridex.com" };
-          return next();
         } else {
           throw jwtErr;
         }
