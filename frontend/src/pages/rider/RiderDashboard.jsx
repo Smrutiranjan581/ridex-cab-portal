@@ -11,6 +11,7 @@ import RatingModal from '../../components/booking/RatingModal';
 import LiveMap from '../../components/booking/LiveMap';
 import RiderWelcomeOfferModal from '../../components/rider/RiderWelcomeOfferModal';
 import { getRiderRideCount, getRiderWelcomeDiscount } from '../../utils/riderDiscount';
+import { compileRealRiderTrips } from '../../utils/realRides';
 import api from '../../services/api';
 
 export default function RiderDashboard() {
@@ -42,20 +43,36 @@ export default function RiderDashboard() {
 
   useEffect(() => {
     const fetchRides = async () => {
+      let apiList = [];
       try {
         const res = await api.get('/bookings/my-rides');
-        if (res.data.success && Array.isArray(res.data.rides)) {
-          setRides(res.data.rides);
-          const userKey = (user?.email || user?.phone || 'guest').toLowerCase();
-          if (res.data.rides.length > 0) {
-            localStorage.setItem(`ridex_rider_trips_count_${userKey}`, String(res.data.rides.length));
-          }
+        if (res.data?.success && Array.isArray(res.data.rides)) {
+          apiList = res.data.rides;
         }
-      } catch (err) {
-        console.log("Using demo fallback rides");
-      }
+      } catch (err) {}
+
+      const compiled = compileRealRiderTrips(user, apiList);
+      const tableFormat = compiled.map(r => ({
+        _id: r._id,
+        bookingId: r.id,
+        rider: { name: user?.name || "Corporate Passenger", email: user?.email },
+        pickup: { address: r.pickup },
+        drop: { address: r.drop },
+        vehicleType: r.vehicleType,
+        fare: { total: r.fare },
+        status: r.status === 'completed' ? 'trip_completed' : (r.status === 'cancelled' ? 'cancelled' : 'captain_arriving'),
+        createdAt: r.date,
+        date: r.date
+      }));
+
+      setRides(tableFormat);
+      const userKey = (user?.email || user?.phone || 'guest').toLowerCase();
+      localStorage.setItem(`ridex_rider_trips_count_${userKey}`, String(tableFormat.length));
     };
+
     fetchRides();
+    const interval = setInterval(fetchRides, 5000);
+    return () => clearInterval(interval);
   }, [user]);
 
   const completedCount = rides.filter(r => r.status === 'trip_completed').length || 8;
@@ -286,28 +303,7 @@ export default function RiderDashboard() {
             </div>
 
             <BookingsTable
-              bookings={rides.length ? rides : [
-                {
-                  _id: "bk_demo_1",
-                  bookingId: "FLT-9042",
-                  rider: { name: user?.name || "Rahul Sharma" },
-                  pickup: { address: "Infocity IT Hub, Silicon Hills" },
-                  drop: { address: "Biju Patnaik Airport (BBI)" },
-                  vehicleType: "sedan",
-                  fare: { total: 410 },
-                  status: "trip_completed"
-                },
-                {
-                  _id: "bk_demo_2",
-                  bookingId: "FLT-9188",
-                  rider: { name: user?.name || "Rahul Sharma" },
-                  pickup: { address: "Fortune Tower, Maitree Vihar" },
-                  drop: { address: "Esplanade Mall, Rasulgarh" },
-                  vehicleType: "suv",
-                  fare: { total: 366 },
-                  status: "captain_arriving"
-                }
-              ]}
+              bookings={rides}
               onViewInvoice={(b) => setSelectedInvoice(b)}
             />
           </div>

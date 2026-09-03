@@ -15,6 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import jsPDF from 'jspdf';
+import { compileRealRiderTrips } from '../../utils/realRides';
 import api from '../../services/api';
 
 function FavMapCenterTracker({ center, onMove }) {
@@ -345,106 +346,24 @@ export default function ProfileDrawerModal({ onClose }) {
   // My Rides / Trip History state
   const [ridesFilter, setRidesFilter] = useState("all"); // 'all' | 'completed' | 'cancelled'
   const [selectedRideReceipt, setSelectedRideReceipt] = useState(null);
-  const [ridesHistoryList, setRidesHistoryList] = useState([
-    {
-      id: "RDX-9989",
-      date: "Today, 12:20 PM",
-      pickup: "Infocity IT Corridor, Patia",
-      drop: "BBI Airport Terminal 1",
-      distance: "12.5 km",
-      duration: "24 mins",
-      vehicleType: "Cab (Swift Dzire)",
-      vehicleNumber: "OD-02-AB-1234",
-      vehicleIcon: "🚗",
-      captainName: "Jitendra Mohanty",
-      captainRating: "4.92",
-      fare: 180,
-      paymentMode: "RideX Wallet",
-      status: "completed",
-      userRating: 5,
-      baseFare: 50,
-      distanceFare: 110,
-      taxes: 20
-    },
-    {
-      id: "RDX-8421",
-      date: "30 Aug 2026, 08:45 PM",
-      pickup: "KIIT Square, Patia",
-      drop: "Master Canteen Station Square",
-      distance: "8.2 km",
-      duration: "18 mins",
-      vehicleType: "Bike (Honda Activa)",
-      vehicleNumber: "OD-02-AK-4455",
-      vehicleIcon: "🛵",
-      captainName: "Bikash Kumar Sahoo",
-      captainRating: "4.88",
-      fare: 65,
-      paymentMode: "Cash on Drop",
-      status: "completed",
-      userRating: 5,
-      baseFare: 25,
-      distanceFare: 35,
-      taxes: 5
-    },
-    {
-      id: "RDX-7612",
-      date: "28 Aug 2026, 09:15 AM",
-      pickup: "Jaydev Vihar Overbridge",
-      drop: "Esplanade One Mall, Rasulgarh",
-      distance: "6.4 km",
-      duration: "15 mins",
-      vehicleType: "Auto (Bajaj RE)",
-      vehicleNumber: "OD-02-BA-2211",
-      vehicleIcon: "🛺",
-      captainName: "Pradeep Rout",
-      captainRating: "4.95",
-      fare: 110,
-      paymentMode: "UPI / PhonePe",
-      status: "completed",
-      userRating: 5,
-      baseFare: 35,
-      distanceFare: 65,
-      taxes: 10
-    },
-    {
-      id: "RDX-6902",
-      date: "22 Aug 2026, 06:30 PM",
-      pickup: "Khandagiri Caves, Bharatpur",
-      drop: "Saheed Nagar Market",
-      distance: "11.0 km",
-      duration: "28 mins",
-      vehicleType: "Cab (Hyundai Aura)",
-      vehicleNumber: "OD-02-CC-8899",
-      vehicleIcon: "🚗",
-      captainName: "Manoj Panda",
-      captainRating: "4.90",
-      fare: 160,
-      paymentMode: "RideX Wallet",
-      status: "completed",
-      userRating: 5,
-      baseFare: 45,
-      distanceFare: 100,
-      taxes: 15
-    },
-    {
-      id: "RDX-5510",
-      date: "18 Aug 2026, 10:10 AM",
-      pickup: "Utkal University Vani Vihar",
-      drop: "Forum Mart, Janpath",
-      distance: "4.2 km",
-      duration: "12 mins",
-      vehicleType: "Bike",
-      vehicleNumber: "OD-02-DX-1122",
-      vehicleIcon: "🛵",
-      captainName: "Santosh Moharana",
-      captainRating: "4.80",
-      fare: 0,
-      paymentMode: "Cancelled",
-      status: "cancelled",
-      cancelReason: "Captain took too long to arrive",
-      userRating: 0
+  const [ridesHistoryList, setRidesHistoryList] = useState(() => compileRealRiderTrips(user));
+
+  useEffect(() => {
+    if (activeSubModal === "my_rides") {
+      const fetchAndSyncRides = async () => {
+        let apiList = [];
+        try {
+          const res = await api.get('/bookings/my-rides');
+          if (res.data?.success && Array.isArray(res.data.rides)) {
+            apiList = res.data.rides;
+          }
+        } catch (e) {}
+        const compiled = compileRealRiderTrips(user, apiList);
+        setRidesHistoryList(compiled);
+      };
+      fetchAndSyncRides();
     }
-  ]);
+  }, [activeSubModal, user]);
 
   const [isSendingInvoice, setIsSendingInvoice] = useState(false);
   const [invoiceSentSuccess, setInvoiceSentSuccess] = useState(null);
@@ -1805,79 +1724,102 @@ export default function ProfileDrawerModal({ onClose }) {
 
                       {/* Rides List */}
                       <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-                        {ridesHistoryList
-                          .filter(r => ridesFilter === "all" || r.status === ridesFilter)
-                          .map((ride) => (
-                            <div
-                              key={ride.id}
-                              className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/70 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all space-y-3 shadow-sm group"
+                        {ridesHistoryList.filter(r => ridesFilter === "all" || r.status === ridesFilter).length === 0 ? (
+                          <div className="py-14 text-center space-y-3 px-4 animate-in fade-in">
+                            <div className="w-16 h-16 rounded-3xl bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto text-3xl shadow-sm">
+                              🚖
+                            </div>
+                            <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                              No {ridesFilter !== 'all' ? ridesFilter : ''} Rides Found
+                            </h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto leading-relaxed">
+                              You haven't booked any {ridesFilter !== 'all' ? ridesFilter : ''} rides yet. Book your first ride with exclusive welcome discounts!
+                            </p>
+                            <button
+                              onClick={() => {
+                                onClose();
+                                navigate('/rider/book');
+                              }}
+                              className="px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-md transition-all inline-flex items-center gap-2 cursor-pointer hover:scale-105"
                             >
-                              {/* Top Bar: Vehicle Type, Status, Date */}
-                              <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 dark:border-slate-700/80">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-lg">{ride.vehicleIcon}</span>
-                                  <div>
-                                    <p className="text-xs font-black text-slate-900 dark:text-white">{ride.vehicleType}</p>
-                                    <p className="text-[10px] text-slate-400 font-medium">{ride.date}</p>
+                              <Car className="w-4 h-4" /> Book RideX Cab Now ➔
+                            </button>
+                          </div>
+                        ) : (
+                          ridesHistoryList
+                            .filter(r => ridesFilter === "all" || r.status === ridesFilter)
+                            .map((ride) => (
+                              <div
+                                key={ride.id}
+                                className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/70 hover:border-amber-500/50 dark:hover:border-amber-500/50 transition-all space-y-3 shadow-sm group"
+                              >
+                                {/* Top Bar: Vehicle Type, Status, Date */}
+                                <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 dark:border-slate-700/80">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-lg">{ride.vehicleIcon}</span>
+                                    <div>
+                                      <p className="text-xs font-black text-slate-900 dark:text-white">{ride.vehicleType}</p>
+                                      <p className="text-[10px] text-slate-400 font-medium">{ride.date}</p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    {ride.status === "completed" ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                        <Check className="w-3 h-3" /> Completed
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                                        Cancelled
+                                      </span>
+                                    )}
+                                    <p className="text-sm font-black text-slate-900 dark:text-white font-mono mt-0.5">
+                                      {ride.status === "completed" ? `₹${ride.fare}` : "₹0"}
+                                    </p>
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  {ride.status === "completed" ? (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                      <Check className="w-3 h-3" /> Completed
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20">
-                                      Cancelled
-                                    </span>
-                                  )}
-                                  <p className="text-sm font-black text-slate-900 dark:text-white font-mono mt-0.5">
-                                    {ride.status === "completed" ? `₹${ride.fare}` : "₹0"}
+
+                                {/* Route Summary */}
+                                <div className="space-y-1.5 text-xs">
+                                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 truncate">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                                    <span className="truncate font-semibold">{ride.pickup}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 truncate">
+                                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                                    <span className="truncate font-semibold">{ride.drop}</span>
+                                  </div>
+                                </div>
+
+                                {/* Captain & Action Buttons */}
+                                <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                                    Captain: <b className="text-slate-700 dark:text-slate-200">{ride.captainName}</b>
                                   </p>
-                                </div>
-                              </div>
 
-                              {/* Route Summary */}
-                              <div className="space-y-1.5 text-xs">
-                                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 truncate">
-                                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                                  <span className="truncate font-semibold">{ride.pickup}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 truncate">
-                                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                                  <span className="truncate font-semibold">{ride.drop}</span>
-                                </div>
-                              </div>
-
-                              {/* Captain & Action Buttons */}
-                              <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                                  Captain: <b className="text-slate-700 dark:text-slate-200">{ride.captainName}</b>
-                                </p>
-
-                                <div className="flex items-center gap-2">
-                                  {ride.status === "completed" && (
+                                  <div className="flex items-center gap-2">
+                                    {ride.status === "completed" && (
+                                      <button
+                                        onClick={() => setSelectedRideReceipt(ride)}
+                                        className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-amber-500 text-[11px] font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                                      >
+                                        <Receipt className="w-3 h-3 text-amber-500" /> Receipt
+                                      </button>
+                                    )}
                                     <button
-                                      onClick={() => setSelectedRideReceipt(ride)}
-                                      className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:border-amber-500 text-[11px] font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                                      onClick={() => {
+                                        onClose();
+                                        navigate('/rider/book');
+                                      }}
+                                      className="px-2.5 py-1 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-black transition-all shadow-xs flex items-center gap-1 cursor-pointer"
                                     >
-                                      <Receipt className="w-3 h-3 text-amber-500" /> Receipt
+                                      <RotateCcw className="w-3 h-3" /> Rebook
                                     </button>
-                                  )}
-                                  <button
-                                    onClick={() => {
-                                      onClose();
-                                      navigate('/rider/book');
-                                    }}
-                                    className="px-2.5 py-1 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-black transition-all shadow-xs flex items-center gap-1 cursor-pointer"
-                                  >
-                                    <RotateCcw className="w-3 h-3" /> Rebook
-                                  </button>
+                                  </div>
                                 </div>
-                              </div>
 
-                            </div>
-                          ))}
+                              </div>
+                            ))
+                        )}
                       </div>
 
                     </div>
