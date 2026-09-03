@@ -1,15 +1,15 @@
-﻿import React from 'react';
+import React from 'react';
 import { Smartphone, Download, ShieldCheck, Car, X, QrCode, ArrowRight, CheckCircle2 } from 'lucide-react';
 
 export default function DownloadAppModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-in fade-in">
-      <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95">
+    <div className="fixed inset-0 z-[99999] overflow-y-auto p-3 sm:p-6 flex items-center justify-center bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+      <div className="w-full max-w-lg max-h-[92vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 my-auto">
         
         {/* Header */}
-        <div className="p-6 bg-gradient-to-br from-amber-500/15 via-transparent to-transparent border-b border-slate-100 dark:border-slate-800 relative">
+        <div className="p-5 sm:p-6 bg-gradient-to-br from-amber-500/15 via-transparent to-transparent border-b border-slate-100 dark:border-slate-800 relative shrink-0">
           <button
             onClick={onClose}
             className="absolute right-4 top-4 p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -18,14 +18,14 @@ export default function DownloadAppModal({ isOpen, onClose }) {
           </button>
 
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/30 font-black">
-              <Smartphone className="w-6 h-6" />
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/30 font-black shrink-0">
+              <Smartphone className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
               <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/25 px-2.5 py-0.5 rounded-full">
                 Direct Android APKs
               </span>
-              <h3 className="text-xl font-black text-slate-900 dark:text-white mt-0.5">
+              <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-0.5">
                 Download RideX Mobile Apps
               </h3>
             </div>
@@ -36,12 +36,12 @@ export default function DownloadAppModal({ isOpen, onClose }) {
         </div>
 
         {/* Apps Selection Cards */}
-        <div className="p-6 space-y-3.5">
+        <div className="p-4 sm:p-6 space-y-3.5 overflow-y-auto flex-1">
           
           {/* Card 1: Rider App */}
           <div className="p-4 rounded-2xl border border-amber-500/30 bg-amber-50/30 dark:bg-amber-950/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 hover:border-amber-500 transition-all group">
             <div className="flex items-start gap-3.5">
-              <div className="w-11 h-11 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20 mt-0.5">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-md shadow-amber-500/20 mt-0.5">
                 <Car className="w-5 h-5" />
               </div>
               <div>
@@ -79,7 +79,7 @@ export default function DownloadAppModal({ isOpen, onClose }) {
           {/* Card 2: Captain App */}
           <div className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 hover:border-amber-500 transition-all group">
             <div className="flex items-start gap-3.5">
-              <div className="w-11 h-11 rounded-2xl bg-slate-900 dark:bg-slate-800 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-md mt-0.5">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-slate-900 dark:bg-slate-800 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-md mt-0.5">
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
