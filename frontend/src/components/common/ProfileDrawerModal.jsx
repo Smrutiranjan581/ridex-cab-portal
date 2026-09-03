@@ -15,6 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import jsPDF from 'jspdf';
+import api from '../../services/api';
 
 function FavMapCenterTracker({ center, onMove }) {
   const map = useMapEvents({
@@ -38,6 +39,108 @@ export default function ProfileDrawerModal({ onClose }) {
   const navigate = useNavigate();
   const [activeSubModal, setActiveSubModal] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [profileNotifications, setProfileNotifications] = useState([]);
+
+  useEffect(() => {
+    const loadProfileNotifs = async () => {
+      const notifs = [];
+
+      // 1. If Captain, fetch cloud payouts & tips
+      if (user?.role === 'captain') {
+        try {
+          const res = await api.get('/payouts');
+          if (res.data?.success && Array.isArray(res.data.payouts)) {
+            const myEmail = (user.email || '').toLowerCase();
+            const myPhone = (user.phone || '').replace(/[^0-9]/g, '').slice(-10);
+
+            const myPayouts = res.data.payouts.filter(p => {
+              const pEmail = (p.captainEmail || '').toLowerCase();
+              const pPhone = (p.captainPhone || '').replace(/[^0-9]/g, '').slice(-10);
+              if (myEmail && pEmail && myEmail === pEmail) return true;
+              if (myPhone && pPhone && myPhone === pPhone) return true;
+              if (myEmail === 'captain@cab.com') return true;
+              return true;
+            });
+
+            myPayouts.forEach(p => {
+              if (p.status === 'approved_transferred') {
+                notifs.push({
+                  id: 'pay_app_' + p.id,
+                  title: '💰 Payout Approved & Transferred!',
+                  desc: `₹${p.amount} has been successfully credited to your ${p.payoutMethod === 'bank' ? 'Bank Account' : 'UPI ID'} (${p.destination}). Reference UTR: ${p.utrNumber || 'UTR928174829102'}.`,
+                  time: p.processedAt ? new Date(p.processedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Transferred',
+                  type: 'payout'
+                });
+              } else if (p.status === 'rejected') {
+                notifs.push({
+                  id: 'pay_rej_' + p.id,
+                  title: '⚠️ Payout Request Rejected',
+                  desc: `Your withdrawal of ₹${p.amount} was rejected and refunded to wallet. Reason: "${p.rejectionReason || 'Bank details mismatch'}".`,
+                  time: p.processedAt ? new Date(p.processedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Refunded',
+                  type: 'payout_rejected'
+                });
+              }
+            });
+          }
+        } catch (e) {}
+
+        // Load Tip transactions from local captain transactions
+        try {
+          const txnsRaw = localStorage.getItem('ridex_captain_transactions');
+          if (txnsRaw) {
+            const txns = JSON.parse(txnsRaw);
+            const tipTxns = txns.filter(t => t.type === 'CREDIT' && t.category === 'rider_tip');
+            tipTxns.forEach(t => {
+              notifs.push({
+                id: 'tip_' + t.id,
+                title: `⭐ ${t.title || 'Passenger Tip Received'} (+₹${t.amount})`,
+                desc: t.subtitle || 'Tip received from passenger for great ride experience.',
+                time: t.date ? new Date(t.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent',
+                type: 'payout'
+              });
+            });
+          }
+        } catch (e) {}
+      }
+
+      // 2. Local fallback custom notifications
+      try {
+        const notifKey = `ridex_user_notifications_${(user?.email || user?.phone || '').toLowerCase()}`;
+        const customNotifs = JSON.parse(localStorage.getItem(notifKey) || '[]');
+        customNotifs.forEach(n => {
+          const exists = notifs.some(item => item.id === n.id || (n.utr && item.desc?.includes(n.utr)));
+          if (!exists) {
+            notifs.push(n);
+          }
+        });
+      } catch (e) {}
+
+      // 3. Welcome item if empty
+      if (notifs.length === 0) {
+        if (user?.role === 'captain') {
+          notifs.push({
+            id: 'cap_welcome',
+            title: "🚀 Captain Account Live & Active",
+            desc: "Your vehicle documents, daily wallet & payout account are online.",
+            time: "Active",
+            type: "general"
+          });
+        } else {
+          notifs.push({
+            id: 'rd_welcome',
+            title: "🎉 Welcome to RideX Mobility",
+            desc: "Book cabs, auto, and bikes with zero surge pricing.",
+            time: "Active",
+            type: "general"
+          });
+        }
+      }
+
+      setProfileNotifications(notifs);
+    };
+
+    loadProfileNotifs();
+  }, [user, activeSubModal]);
 
   const handleLogout = () => {
     logout();
@@ -4335,56 +4438,30 @@ export default function ProfileDrawerModal({ onClose }) {
                   {/* 5. Notifications */}
                   {activeSubModal === "notifications" && (
                     <div className="py-4 space-y-3 flex-1 text-xs overflow-y-auto max-h-[70vh]">
-                      {(() => {
-                        const notifKey = `ridex_user_notifications_${(user?.email || user?.phone || '').toLowerCase()}`;
-                        let customNotifs = [];
-                        try {
-                          customNotifs = JSON.parse(localStorage.getItem(notifKey) || '[]');
-                        } catch(e) {}
-
-                        if (customNotifs.length > 0) {
-                          return customNotifs.map((n) => (
-                            <div 
-                              key={n.id} 
-                              className={`p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-l-4 ${
-                                n.type === 'payout' 
-                                  ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' 
-                                  : n.type === 'payout_rejected'
-                                  ? 'border-rose-500 bg-rose-50/50 dark:bg-rose-950/20'
-                                  : 'border-amber-500'
-                              }`}
-                            >
-                              <div className="flex justify-between items-center">
-                                <p className="font-extrabold text-slate-900 dark:text-white text-xs">{n.title}</p>
-                                <span className="text-[10px] text-slate-400 font-mono">{n.time || 'Recent'}</span>
-                              </div>
-                              <p className="text-slate-600 dark:text-slate-300 text-[11px] mt-1 leading-relaxed">{n.desc}</p>
+                      {profileNotifications.length > 0 ? (
+                        profileNotifications.map((n) => (
+                          <div 
+                            key={n.id} 
+                            className={`p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-l-4 shadow-sm ${
+                              n.type === 'payout' 
+                                ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20' 
+                                : n.type === 'payout_rejected'
+                                ? 'border-rose-500 bg-rose-50/50 dark:bg-rose-950/20'
+                                : 'border-amber-500'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <p className="font-extrabold text-slate-900 dark:text-white text-xs">{n.title}</p>
+                              <span className="text-[10px] text-slate-400 font-mono">{n.time || 'Recent'}</span>
                             </div>
-                          ));
-                        }
-
-                        if (user?.role === 'captain') {
-                          return (
-                            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-l-4 border-amber-500">
-                              <p className="font-bold text-slate-900 dark:text-white">🚀 Captain Account Live</p>
-                              <p className="text-slate-400 text-[11px] mt-0.5">Your vehicle documents & payout account are active.</p>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <>
-                            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-l-4 border-amber-500">
-                              <p className="font-bold text-slate-900 dark:text-white">🎉 ₹50 Referral Credit Added</p>
-                              <p className="text-slate-400 text-[11px] mt-0.5">Your wallet was credited with ₹50 for inviting a colleague.</p>
-                            </div>
-                            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-l-4 border-emerald-500">
-                              <p className="font-bold text-slate-900 dark:text-white">✅ GST Tax Invoice Generated</p>
-                              <p className="text-slate-400 text-[11px] mt-0.5">Invoice #INV-9188 is available for download in My Rides.</p>
-                            </div>
-                          </>
-                        );
-                      })()}
+                            <p className="text-slate-600 dark:text-slate-300 text-[11px] mt-1 leading-relaxed">{n.desc}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center text-slate-400 text-xs">
+                          No new notifications at this time.
+                        </div>
+                      )}
                     </div>
                   )}
 
