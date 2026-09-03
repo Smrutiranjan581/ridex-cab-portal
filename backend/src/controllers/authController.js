@@ -316,3 +316,36 @@ exports.getMe = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.updateWalletBalance = async (req, res) => {
+  try {
+    const { amount, action } = req.body;
+    const num = Number(amount);
+    if (isNaN(num)) {
+      return res.status(400).json({ success: false, message: "Invalid amount" });
+    }
+
+    let user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    if (action === "deduct") {
+      user.walletBalance = Math.max(0, (user.walletBalance || 0) - num);
+    } else if (action === "add") {
+      user.walletBalance = (user.walletBalance || 0) + num;
+    } else {
+      user.walletBalance = num;
+    }
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Wallet balance updated successfully",
+      walletBalance: user.walletBalance
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

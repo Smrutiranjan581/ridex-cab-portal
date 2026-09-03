@@ -71,6 +71,64 @@ export default function BookRidePage() {
     setIsSearching(true);
     setIsSubmitting(false);
 
+    // Deduct ride fare from rider's local wallet balance, create debit passbook entry & notification
+    try {
+      const userKey = (user?.email || user?.phone || 'user').toLowerCase();
+      const currentBal = Number(localStorage.getItem(`ridex_wallet_balance_${userKey}`) ?? user?.walletBalance ?? 1500);
+      const remainingBal = Math.max(0, currentBal - Number(dispatchData.fare || 0));
+      localStorage.setItem(`ridex_wallet_balance_${userKey}`, String(remainingBal));
+
+      // 1. Update registered users in local storage
+      const rawUsers = localStorage.getItem('fleetcorp_registered_users');
+      if (rawUsers) {
+        let users = JSON.parse(rawUsers);
+        users = users.map(u => {
+          if ((u.email && user?.email && u.email.toLowerCase() === user.email.toLowerCase()) ||
+              (u.phone && user?.phone && u.phone === user.phone)) {
+            return { ...u, walletBalance: remainingBal };
+          }
+          return u;
+        });
+        localStorage.setItem('fleetcorp_registered_users', JSON.stringify(users));
+      }
+
+      // 2. Add Debit entry to passbook
+      const now = new Date();
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear().toString().slice(-2)}, ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      
+      const newDebitTxn = {
+        id: 'DEBIT-' + Date.now(),
+        type: "Debit",
+        mode: `Ride Booking #${dispatchData.id} • ${dispatchData.category}`,
+        date: dateStr,
+        amount: `- ₹${Number(dispatchData.fare).toFixed(2)}`,
+        timestamp: Date.now()
+      };
+
+      const existingRecharges = JSON.parse(localStorage.getItem(`ridex_wallet_recharges_${userKey}`) || '[]');
+      existingRecharges.unshift(newDebitTxn);
+      localStorage.setItem(`ridex_wallet_recharges_${userKey}`, JSON.stringify(existingRecharges));
+
+      // 3. Add live notification under Profile Notifications
+      const notifKey = `ridex_user_notifications_${userKey}`;
+      const existingNotifs = JSON.parse(localStorage.getItem(notifKey) || '[]');
+      const newNotif = {
+        id: 'notif_book_' + Date.now(),
+        title: '💳 Ride Fare Paid from RideX Wallet',
+        desc: `₹${dispatchData.fare} deducted for trip #${dispatchData.id} to ${typeof dispatchData.drop === 'string' ? dispatchData.drop : dispatchData.drop?.address || 'destination'}. Remaining Balance: ₹${remainingBal.toFixed(2)}.`,
+        time: 'Just now',
+        type: 'payout'
+      };
+      existingNotifs.unshift(newNotif);
+      localStorage.setItem(notifKey, JSON.stringify(existingNotifs));
+
+      if ('BroadcastChannel' in window) {
+        const channel = new BroadcastChannel('ridex_dispatch_channel');
+        channel.postMessage({ type: 'WALLET_BALANCE_UPDATED', walletBalance: remainingBal, notification: newNotif });
+      }
+    } catch (e) {}
+
     // Save pending dispatch request so Captain Dashboard can listen and accept
     try {
       localStorage.setItem('fleetcorp_live_dispatch_request', JSON.stringify(dispatchData));

@@ -155,6 +155,21 @@ exports.createBooking = async (req, res) => {
     let booking;
     try {
       booking = await Booking.create(bookingData);
+
+      // Deduct ride fare from rider's wallet balance in MongoDB Atlas
+      if (req.user?._id) {
+        const u = await User.findById(req.user._id);
+        if (u) {
+          u.walletBalance = Math.max(0, (u.walletBalance || 1500) - Number(fare.total || 0));
+          await u.save();
+        }
+      } else if (riderUser.email) {
+        const u = await User.findOne({ email: riderUser.email.toLowerCase() });
+        if (u) {
+          u.walletBalance = Math.max(0, (u.walletBalance || 1500) - Number(fare.total || 0));
+          await u.save();
+        }
+      }
     } catch (e) {
       console.error("Booking.create error:", e.message);
       booking = { ...bookingData, _id: "bk_" + Date.now(), createdAt: new Date() };

@@ -35,6 +35,23 @@ export default function ManageRiders() {
     return () => clearInterval(interval);
   }, []);
 
+  // Helper to get real live wallet balance
+  const getRealRiderWalletBalance = (email, phone, fallback = 1500) => {
+    try {
+      const emailKey = (email || '').toLowerCase();
+      const phoneKey = (phone || '').replace(/[^0-9]/g, '').slice(-10);
+      if (emailKey) {
+        const saved = localStorage.getItem(`ridex_wallet_balance_${emailKey}`);
+        if (saved !== null && !isNaN(Number(saved))) return Number(saved);
+      }
+      if (phoneKey) {
+        const saved = localStorage.getItem(`ridex_wallet_balance_${phoneKey}`);
+        if (saved !== null && !isNaN(Number(saved))) return Number(saved);
+      }
+    } catch (e) {}
+    return fallback;
+  };
+
   // Extract riders from completed trip records
   let tripRiders = [];
   try {
@@ -43,13 +60,15 @@ export default function ManageRiders() {
       const trips = JSON.parse(tripsRaw);
       trips.forEach((t, i) => {
         if (t.rider?.name) {
+          const email = t.rider.email || `${t.rider.name.toLowerCase().replace(/\s+/g, '')}@gmail.com`;
+          const phone = t.rider.phone || '+91 9437000000';
           tripRiders.push({
             _id: 'trip_rd_' + i,
             name: t.rider.name,
-            email: t.rider.email || `${t.rider.name.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-            phone: t.rider.phone || '+91 9437000000',
+            email,
+            phone,
             company: t.rider.company || 'Corporate Passenger',
-            walletBalance: 2500,
+            walletBalance: getRealRiderWalletBalance(email, phone, 1500),
             status: 'active'
           });
         }
@@ -65,14 +84,14 @@ export default function ManageRiders() {
       email: u.email,
       phone: u.phone || "+91 9876543210",
       company: u.company || "Corporate Partner",
-      walletBalance: u.walletBalance || 1500,
+      walletBalance: getRealRiderWalletBalance(u.email, u.phone, u.walletBalance ?? 1500),
       status: u.status || (u.isDeactivated ? 'deactivated' : 'active'),
       deactivationReason: u.deactivationReason || null,
       deactivatedAt: u.deactivatedAt || null
     }));
 
   // Combine backend real riders with locally registered real riders and trip passengers
-  const list = [...riders, ...realRegisteredRiders, ...tripRiders].filter(
+  const list = [...riders.map(r => ({ ...r, walletBalance: getRealRiderWalletBalance(r.email, r.phone, r.walletBalance ?? 1500) })), ...realRegisteredRiders, ...tripRiders].filter(
     (rd, idx, arr) => arr.findIndex(r => {
       const rName = (r.name || '').trim().toLowerCase();
       const rdName = (rd.name || '').trim().toLowerCase();

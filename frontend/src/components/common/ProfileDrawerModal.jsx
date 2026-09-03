@@ -166,7 +166,18 @@ export default function ProfileDrawerModal({ onClose }) {
   const [chatMessages, setChatMessages] = useState([]);
 
   // Wallet & Add Money state
-  const [walletBalance, setWalletBalance] = useState(0);
+  const getInitialWalletBalance = () => {
+    try {
+      const userKey = (user?.email || user?.phone || 'user').toLowerCase();
+      const savedBal = localStorage.getItem(`ridex_wallet_balance_${userKey}`);
+      if (savedBal !== null && !isNaN(Number(savedBal))) return Number(savedBal);
+      return Number(user?.walletBalance ?? 1500);
+    } catch (e) {
+      return Number(user?.walletBalance ?? 1500);
+    }
+  };
+
+  const [walletBalance, setWalletBalance] = useState(getInitialWalletBalance);
   const [addMoneyAmount, setAddMoneyAmount] = useState("50");
   const [addMoneySuccess, setAddMoneySuccess] = useState(false);
 
@@ -178,7 +189,7 @@ export default function ProfileDrawerModal({ onClose }) {
       const myEmail = (user?.email || '').toLowerCase();
       const myPhone = (user?.phone || '').replace(/[^0-9]/g, '').slice(-10);
 
-      // 1. Load manual wallet recharges / top-ups from local storage
+      // 1. Load manual wallet recharges & debit transactions from local storage
       const rechargesRaw = localStorage.getItem(`ridex_wallet_recharges_${userKey}`);
       if (rechargesRaw) {
         const recharges = JSON.parse(rechargesRaw);
@@ -233,14 +244,17 @@ export default function ProfileDrawerModal({ onClose }) {
 
             const fareAmt = trip.fare?.total || trip.fare || 0;
             if (fareAmt > 0) {
-              realItems.push({
-                id: 'RIDE-' + (trip.bookingId || trip._id || Math.random()),
-                type: 'Debit',
-                mode: `${trip.vehicleType || trip.category || 'RideX'} Commute • ${trip.drop ? (typeof trip.drop === 'string' ? trip.drop.slice(0, 24) : trip.drop.address?.slice(0, 24)) : 'Completed Ride'}`,
-                date: formattedDate,
-                amount: `- ₹${Number(fareAmt).toFixed(2)}`,
-                timestamp: isNaN(dateObj.getTime()) ? Date.now() : dateObj.getTime()
-              });
+              const alreadyInRecharges = realItems.some(item => item.id?.includes(trip.bookingId || trip._id));
+              if (!alreadyInRecharges) {
+                realItems.push({
+                  id: 'RIDE-' + (trip.bookingId || trip._id || Math.random()),
+                  type: 'Debit',
+                  mode: `${trip.vehicleType || trip.category || 'RideX'} Commute • ${trip.drop ? (typeof trip.drop === 'string' ? trip.drop.slice(0, 24) : trip.drop.address?.slice(0, 24)) : 'Completed Ride'}`,
+                  date: formattedDate,
+                  amount: `- ₹${Number(fareAmt).toFixed(2)}`,
+                  timestamp: isNaN(dateObj.getTime()) ? Date.now() : dateObj.getTime()
+                });
+              }
             }
           });
         }
@@ -257,7 +271,25 @@ export default function ProfileDrawerModal({ onClose }) {
   const [passbookList, setPassbookList] = useState(loadRealPassbookList);
 
   useEffect(() => {
+    setWalletBalance(getInitialWalletBalance());
     setPassbookList(loadRealPassbookList());
+
+    let ch;
+    if ('BroadcastChannel' in window) {
+      ch = new BroadcastChannel('ridex_dispatch_channel');
+      ch.onmessage = (event) => {
+        if (event.data?.type === 'WALLET_BALANCE_UPDATED') {
+          if (typeof event.data.walletBalance === 'number') {
+            setWalletBalance(event.data.walletBalance);
+          }
+          setPassbookList(loadRealPassbookList());
+        }
+      };
+    }
+
+    return () => {
+      if (ch) ch.close();
+    };
   }, [user, activeSubModal]);
 
   // Delete Account modal state & Pro-level Popup state
@@ -711,10 +743,35 @@ export default function ProfileDrawerModal({ onClose }) {
     }
   };
 
-  const handleAddMoneySubmit = () => {
+  const handleAddMoneySubmit = async () => {
     const num = Number(addMoneyAmount);
     if (num > 0) {
-      setWalletBalance(prev => prev + num);
+      const userKey = (user?.email || user?.phone || 'user').toLowerCase();
+      const nextBal = walletBalance + num;
+      setWalletBalance(nextBal);
+      localStorage.setItem(`ridex_wallet_balance_${userKey}`, String(nextBal));
+
+      // Sync with MongoDB backend
+      try {
+        await api.post('/auth/wallet', { amount: num, action: 'add' });
+      } catch (e) {}
+
+      // Update registered users in local storage
+      try {
+        const rawUsers = localStorage.getItem('fleetcorp_registered_users');
+        if (rawUsers) {
+          let users = JSON.parse(rawUsers);
+          users = users.map(u => {
+            if ((u.email && user?.email && u.email.toLowerCase() === user.email.toLowerCase()) ||
+                (u.phone && user?.phone && u.phone === user.phone)) {
+              return { ...u, walletBalance: nextBal };
+            }
+            return u;
+          });
+          localStorage.setItem('fleetcorp_registered_users', JSON.stringify(users));
+        }
+      } catch (e) {}
+
       const now = new Date();
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear().toString().slice(-2)}, ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -729,13 +786,31 @@ export default function ProfileDrawerModal({ onClose }) {
       };
 
       try {
-        const userKey = (user?.email || user?.phone || 'user').toLowerCase();
         const existingRecharges = JSON.parse(localStorage.getItem(`ridex_wallet_recharges_${userKey}`) || '[]');
         existingRecharges.unshift(newEntry);
         localStorage.setItem(`ridex_wallet_recharges_${userKey}`, JSON.stringify(existingRecharges));
       } catch (e) {}
 
+      // Add Notification
+      try {
+        const notifKey = `ridex_user_notifications_${userKey}`;
+        const existingNotifs = JSON.parse(localStorage.getItem(notifKey) || '[]');
+        existingNotifs.unshift({
+          id: 'notif_topup_' + Date.now(),
+          title: '🎉 Wallet Recharged Successfully',
+          desc: `₹${num.toFixed(2)} was successfully credited to your RideX Wallet. Current Balance: ₹${nextBal.toFixed(2)}.`,
+          time: 'Just now',
+          type: 'payout'
+        });
+        localStorage.setItem(notifKey, JSON.stringify(existingNotifs));
+      } catch (e) {}
+
       setPassbookList(prev => [newEntry, ...prev]);
+
+      if ('BroadcastChannel' in window) {
+        const channel = new BroadcastChannel('ridex_dispatch_channel');
+        channel.postMessage({ type: 'WALLET_BALANCE_UPDATED', walletBalance: nextBal });
+      }
 
       setAddMoneySuccess(true);
       setTimeout(() => {
