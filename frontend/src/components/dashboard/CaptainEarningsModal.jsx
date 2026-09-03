@@ -125,27 +125,74 @@ export default function CaptainEarningsModal({ isOpen, onClose, onViewInvoice })
         localStorage.setItem('ridex_captain_transactions', JSON.stringify(updatedTxns));
       }
 
-      // Filter txns by user
-      // Sync any rejected payout requests from ridex_payout_requests into transactions
+      // Sync all Cloud Payout statuses (Approved / Rejected) into local transactions & auto-refund
       try {
+        let cloudPayouts = [];
+        try {
+          const res = await api.get('/payouts');
+          if (res.data?.success && Array.isArray(res.data.payouts)) {
+            cloudPayouts = res.data.payouts;
+          }
+        } catch (e) {}
+
         const storedPayouts = JSON.parse(localStorage.getItem('ridex_payout_requests') || '[]');
-        const rejectedPayoutIds = new Set(
-          storedPayouts
-            .filter(p => p.status === 'rejected' && ((p.captainEmail && user?.email && p.captainEmail.toLowerCase() === user.email.toLowerCase()) || user?.email === 'captain@cab.com'))
-            .map(p => p.id)
+        const mergedPayouts = [...storedPayouts];
+        cloudPayouts.forEach(cp => {
+          const idx = mergedPayouts.findIndex(m => m.id === cp.id);
+          if (idx >= 0) {
+            mergedPayouts[idx] = { ...mergedPayouts[idx], ...cp };
+          } else {
+            mergedPayouts.unshift(cp);
+          }
+        });
+        localStorage.setItem('ridex_payout_requests', JSON.stringify(mergedPayouts));
+
+        const myPayouts = mergedPayouts.filter(p => {
+          if (!user) return false;
+          const myEmail = (user.email || '').toLowerCase();
+          const myPhone = (user.phone || '').replace(/[^0-9]/g, '').slice(-10);
+          const pEmail = (p.captainEmail || '').toLowerCase();
+          const pPhone = (p.captainPhone || '').replace(/[^0-9]/g, '').slice(-10);
+          if (myEmail && pEmail && myEmail === pEmail) return true;
+          if (myPhone && pPhone && myPhone === pPhone) return true;
+          if (myEmail === 'captain@cab.com') return true;
+          return true;
+        });
+
+        const rejectedPayoutMap = new Map(
+          myPayouts
+            .filter(p => p.status === 'rejected')
+            .map(p => [p.id, p.rejectionReason || 'Bank details verification failed'])
         );
 
-        if (rejectedPayoutIds.size > 0) {
-          updatedTxns = updatedTxns.map(t => {
-            if (rejectedPayoutIds.has(t.id) && t.status !== 'REJECTED') {
-              return {
-                ...t,
-                status: 'REJECTED',
-                subtitle: 'Payout Request Rejected by Admin • Amount Refunded to Wallet'
-              };
-            }
-            return t;
-          });
+        const approvedPayoutMap = new Map(
+          myPayouts
+            .filter(p => p.status === 'approved_transferred')
+            .map(p => [p.id, p.utrNumber || 'UTR928174829102'])
+        );
+
+        let txnsModified = false;
+        updatedTxns = updatedTxns.map(t => {
+          if (rejectedPayoutMap.has(t.id)) {
+            txnsModified = true;
+            return {
+              ...t,
+              status: 'REJECTED',
+              subtitle: `Payout Rejected & Refunded to Wallet • ${rejectedPayoutMap.get(t.id)}`
+            };
+          }
+          if (approvedPayoutMap.has(t.id)) {
+            txnsModified = true;
+            return {
+              ...t,
+              status: 'SUCCESS',
+              utr: approvedPayoutMap.get(t.id)
+            };
+          }
+          return t;
+        });
+
+        if (txnsModified) {
           localStorage.setItem('ridex_captain_transactions', JSON.stringify(updatedTxns));
         }
       } catch (e) {}

@@ -34,6 +34,7 @@ export default function CaptainDashboard() {
   const [showEarningsModal, setShowEarningsModal] = useState(false);
   const [selectedInvoiceTrip, setSelectedInvoiceTrip] = useState(null);
   const [payoutApprovedCelebration, setPayoutApprovedCelebration] = useState(null);
+  const [payoutRejectedCelebration, setPayoutRejectedCelebration] = useState(null);
 
   const handleDismissPayoutCelebration = () => {
     if (payoutApprovedCelebration) {
@@ -46,6 +47,19 @@ export default function CaptainDashboard() {
       } catch (e) {}
     }
     setPayoutApprovedCelebration(null);
+  };
+
+  const handleDismissPayoutRejected = () => {
+    if (payoutRejectedCelebration) {
+      try {
+        const acked = JSON.parse(localStorage.getItem('ridex_acknowledged_payout_rejections') || '[]');
+        if (!acked.includes(payoutRejectedCelebration.id)) {
+          acked.push(payoutRejectedCelebration.id);
+          localStorage.setItem('ridex_acknowledged_payout_rejections', JSON.stringify(acked));
+        }
+      } catch (e) {}
+    }
+    setPayoutRejectedCelebration(null);
   };
 
   const handleToggleOnline = () => {
@@ -342,8 +356,7 @@ export default function CaptainDashboard() {
           const myEmail = (user.email || '').toLowerCase();
           const myPhone = (user.phone || '').replace(/[^0-9]/g, '').slice(-10);
 
-          const myApproved = res.data.payouts.filter(p => {
-            if (p.status !== 'approved_transferred') return false;
+          const myPayouts = res.data.payouts.filter(p => {
             const pEmail = (p.captainEmail || '').toLowerCase();
             const pPhone = (p.captainPhone || '').replace(/[^0-9]/g, '').slice(-10);
             if (myEmail && pEmail && myEmail === pEmail) return true;
@@ -352,11 +365,54 @@ export default function CaptainDashboard() {
             return true;
           });
 
-          const acked = JSON.parse(localStorage.getItem('ridex_acknowledged_payout_popups') || '[]');
-          const unacked = myApproved.find(p => !acked.includes(p.id));
+          // 1. Sync rejected payouts into local captain transactions to instantly refund wallet balance
+          try {
+            const rejectedPayoutMap = new Map(
+              myPayouts
+                .filter(p => p.status === 'rejected')
+                .map(p => [p.id, p.rejectionReason || 'Bank details mismatch'])
+            );
 
-          if (unacked) {
-            setPayoutApprovedCelebration(unacked);
+            if (rejectedPayoutMap.size > 0) {
+              const txnsRaw = localStorage.getItem('ridex_captain_transactions');
+              if (txnsRaw) {
+                let txns = JSON.parse(txnsRaw);
+                let changed = false;
+                txns = txns.map(t => {
+                  if (rejectedPayoutMap.has(t.id) && t.status !== 'REJECTED') {
+                    changed = true;
+                    return {
+                      ...t,
+                      status: 'REJECTED',
+                      subtitle: `Payout Rejected & Refunded to Wallet • ${rejectedPayoutMap.get(t.id)}`
+                    };
+                  }
+                  return t;
+                });
+                if (changed) {
+                  localStorage.setItem('ridex_captain_transactions', JSON.stringify(txns));
+                }
+              }
+            }
+          } catch (e) {}
+
+          // 2. Check for newly approved payouts
+          const myApproved = myPayouts.filter(p => p.status === 'approved_transferred');
+          const ackedApp = JSON.parse(localStorage.getItem('ridex_acknowledged_payout_popups') || '[]');
+          const unackedApp = myApproved.find(p => !ackedApp.includes(p.id));
+
+          if (unackedApp) {
+            setPayoutApprovedCelebration(unackedApp);
+            playIncomingRideAlertSound();
+          }
+
+          // 3. Check for newly rejected payouts
+          const myRejected = myPayouts.filter(p => p.status === 'rejected');
+          const ackedRej = JSON.parse(localStorage.getItem('ridex_acknowledged_payout_rejections') || '[]');
+          const unackedRej = myRejected.find(p => !ackedRej.includes(p.id));
+
+          if (unackedRej) {
+            setPayoutRejectedCelebration(unackedRej);
             playIncomingRideAlertSound();
           }
         }
@@ -931,6 +987,86 @@ export default function CaptainDashboard() {
                 className="py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-1.5 transition-transform hover:scale-105 cursor-pointer"
               >
                 View Wallet ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Captain Payout Rejected & Refunded Modal */}
+      {payoutRejectedCelebration && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border-2 border-rose-500/50 text-center space-y-5 animate-in zoom-in-95">
+            {/* Close icon */}
+            <button
+              onClick={handleDismissPayoutRejected}
+              className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Refund Alert Icon */}
+            <div className="w-20 h-20 rounded-full bg-rose-500/20 text-rose-500 flex items-center justify-center mx-auto text-4xl shadow-xl shadow-rose-500/30 ring-8 ring-rose-500/10">
+              ⚠️
+            </div>
+
+            <div className="space-y-1">
+              <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                <AlertCircle className="w-3.5 h-3.5" /> Payout Rejected & Refunded
+              </span>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white mt-1">
+                Amount Refunded to Wallet
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Your withdrawal request was declined by admin and money is returned
+              </p>
+            </div>
+
+            {/* Amount Pill */}
+            <div className="p-4 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/30 space-y-1">
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                Refunded to Withdrawable Balance
+              </p>
+              <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                +₹{payoutRejectedCelebration.amount}
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+                Available to withdraw or ride anytime
+              </p>
+            </div>
+
+            {/* Rejection Details */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 text-left text-xs space-y-2 border border-slate-200/80 dark:border-slate-700 font-medium">
+              <div>
+                <p className="text-slate-400 text-[10px] uppercase font-bold">Admin Rejection Reason:</p>
+                <p className="text-rose-600 dark:text-rose-400 font-bold mt-0.5">
+                  "{payoutRejectedCelebration.rejectionReason || 'Bank account details mismatch.'}"
+                </p>
+              </div>
+              <div className="flex justify-between items-center pt-1 border-t border-slate-200/60 dark:border-slate-700">
+                <span className="text-slate-400">Payout ID:</span>
+                <span className="font-mono text-slate-600 dark:text-slate-300">
+                  #{payoutRejectedCelebration.id}
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={handleDismissPayoutRejected}
+                className="py-3.5 rounded-xl border border-slate-300 dark:border-slate-700 font-bold text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={() => {
+                  handleDismissPayoutRejected();
+                  setShowEarningsModal(true);
+                }}
+                className="py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:hover:bg-amber-400 text-white dark:text-slate-950 font-black text-xs shadow-lg flex items-center justify-center gap-1.5 transition-transform hover:scale-105 cursor-pointer"
+              >
+                Open Wallet ➔
               </button>
             </div>
           </div>
