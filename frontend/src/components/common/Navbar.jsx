@@ -52,112 +52,46 @@ export default function Navbar() {
         
         {/* Brand Logo */}
         <button 
-          onClick={() => {
-            if (user?.role === 'admin') {
-              navigate('/admin');
-            } else if (user?.role === 'captain') {
-              navigate('/captain');
-            } else if (user?.role === 'rider') {
-              navigate('/rider/book');
-            } else {
-              scrollToTop();
-            }
-          }} 
+          onClick={scrollToTop} 
           className="flex items-center gap-3 group text-left cursor-pointer"
         >
           <RideXLogo 
             size="md" 
             adminBadge={user?.role === 'admin'} 
-            subtitle={
-              user?.role === 'admin' 
-                ? 'Super Admin Portal' 
-                : user?.role === 'captain' 
-                  ? 'Captain Driver App' 
-                  : user?.role === 'rider' 
-                    ? 'Rider App • Booking' 
-                    : 'Smart City Commute'
-            } 
+            subtitle={user?.role === 'admin' ? 'Super Admin Portal' : 'Smart City Commute'} 
           />
         </button>
 
         {/* Desktop Navigation Links */}
-        {user?.role === 'admin' ? (
-          <div className="hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/25 text-purple-700 dark:text-purple-300 font-extrabold text-xs">
-            <ShieldCheck className="w-4 h-4 text-purple-500" /> Executive Fleet Command Console
-          </div>
-        ) : user?.role === 'captain' ? (
-          <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-600 dark:text-slate-300">
-            <Link
-              to="/captain"
-              className={`hover:text-amber-500 transition-colors flex items-center gap-1.5 ${
-                location.pathname === '/captain' || location.pathname === '/captain/' ? 'text-amber-500 font-bold' : ''
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4 text-amber-500" />
-              <span>Duty Radar</span>
-            </Link>
-            <Link
-              to="/captain/trips"
-              className={`hover:text-amber-500 transition-colors flex items-center gap-1.5 ${
-                location.pathname.includes('/captain/trips') ? 'text-amber-500 font-bold' : ''
-              }`}
-            >
-              <Clock className="w-4 h-4 text-slate-400" />
-              <span>Trip History</span>
-            </Link>
-          </nav>
-        ) : user?.role === 'rider' ? (
-          <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-600 dark:text-slate-300">
-            <Link
-              to="/rider/book"
-              className={`hover:text-amber-500 transition-colors flex items-center gap-1.5 ${
-                location.pathname.includes('/rider/book') ? 'text-amber-500 font-bold' : ''
-              }`}
-            >
-              <Car className="w-4 h-4 text-amber-500" />
-              <span>Book Ride</span>
-            </Link>
-            <Link
-              to="/rider/my-rides"
-              className={`hover:text-amber-500 transition-colors flex items-center gap-1.5 ${
-                location.pathname.includes('/rider/my-rides') ? 'text-amber-500 font-bold' : ''
-              }`}
-            >
-              <Clock className="w-4 h-4 text-slate-400" />
-              <span>My Rides</span>
-            </Link>
-          </nav>
-        ) : (
-          <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-600 dark:text-slate-300">
-            <button
-              onClick={scrollToTop}
-              className={`hover:text-amber-500 transition-colors ${isCurrent('/') ? 'text-amber-500 font-bold' : ''}`}
-            >
-              Home
-            </button>
-            
-            <button
-              onClick={() => scrollToSection('services')}
-              className="hover:text-amber-500 transition-colors"
-            >
-              Services
-            </button>
-            
-            <button
-              onClick={() => scrollToSection('fleet')}
-              className="hover:text-amber-500 transition-colors"
-            >
-              Our Fleet
-            </button>
-            
-            <button
-              onClick={() => scrollToSection('how-it-works')}
-              className="hover:text-amber-500 transition-colors"
-            >
-              How It Works
-            </button>
-          </nav>
-        )}
+        <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-600 dark:text-slate-300">
+          <button
+            onClick={scrollToTop}
+            className={`hover:text-amber-500 transition-colors ${isCurrent('/') ? 'text-amber-500 font-bold' : ''}`}
+          >
+            Home
+          </button>
+          
+          <button
+            onClick={() => scrollToSection('services')}
+            className="hover:text-amber-500 transition-colors"
+          >
+            Services
+          </button>
+          
+          <button
+            onClick={() => scrollToSection('fleet')}
+            className="hover:text-amber-500 transition-colors"
+          >
+            Our Fleet
+          </button>
+          
+          <button
+            onClick={() => scrollToSection('how-it-works')}
+            className="hover:text-amber-500 transition-colors"
+          >
+            How It Works
+          </button>
+        </nav>
 
         {/* Actions / CTA */}
         <div className="flex items-center gap-2.5">
@@ -174,7 +108,31 @@ export default function Navbar() {
           <ThemeToggle />
 
           {isAuthenticated ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5">
+              {/* Quick Role Shortcut button */}
+              {user?.role === 'captain' ? (
+                <Link
+                  to="/captain"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 transition-all hover:scale-105"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" /> Duty Radar
+                </Link>
+              ) : user?.role === 'admin' ? (
+                <Link
+                  to="/admin"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md transition-all hover:scale-105"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" /> Admin Panel
+                </Link>
+              ) : (
+                <Link
+                  to="/rider/book"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 transition-all hover:scale-105"
+                >
+                  <Car className="w-3.5 h-3.5" /> Book Ride
+                </Link>
+              )}
+
               {/* Profile button shown for Riders and Captains */}
               {user?.role !== 'admin' && (
                 <button

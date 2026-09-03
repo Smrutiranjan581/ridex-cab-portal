@@ -37,31 +37,25 @@ function AppContent() {
     initMobileDeviceExperience(appTarget);
   }, [appTarget]);
 
-  // Determine App Root Destination based on Authentication & App Target
+  // Determine App Root Destination based on App Target
   const getRootElement = () => {
-    // 1. If user is logged in, strictly open their dedicated app dashboard
-    if (isAuthenticated && user) {
-      if (user.role === 'admin') {
-        return <Navigate to="/admin" replace />;
-      }
-      if (user.role === 'captain') {
+    // 1. Dedicated Mobile App APK builds:
+    if (appTarget === 'captain') {
+      if (isAuthenticated && user?.role === 'captain') {
         return <Navigate to="/captain" replace />;
       }
-      if (user.role === 'rider') {
-        return <Navigate to="/rider/book" replace />;
-      }
-    }
-
-    // 2. Dedicated mobile builds for Rider / Captain
-    if (appTarget === 'captain') {
       return <Navigate to="/login" replace />;
     }
 
     if (appTarget === 'rider') {
+      if (isAuthenticated && user?.role === 'rider') {
+        return <Navigate to="/rider/book" replace />;
+      }
       return <Navigate to="/login" replace />;
     }
 
-    // 3. Default Web Portal Root for Guests
+    // 2. Web Browser Portal (ridex-cab-portal.vercel.app):
+    // Always show full Home Landing Page at '/'
     return <LandingPage />;
   };
 
