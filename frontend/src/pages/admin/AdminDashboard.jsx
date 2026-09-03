@@ -17,7 +17,12 @@ import {
   TrendingUp,
   Award,
   Send,
-  AlertTriangle
+  AlertTriangle,
+  Ticket,
+  MessageSquare,
+  Clock,
+  Receipt,
+  Sparkles
 } from 'lucide-react';
 import Navbar from '../../components/common/Navbar';
 import Sidebar from '../../components/common/Sidebar';
@@ -33,7 +38,7 @@ export default function AdminDashboard() {
   const [riders, setRiders] = useState([]);
   const [captainSearch, setCaptainSearch] = useState('');
   const [riderSearch, setRiderSearch] = useState('');
-  const [activeTab, setActiveTab] = useState('all'); // 'all', 'captains', 'riders'
+  const [activeTab, setActiveTab] = useState('all'); // 'all', 'captains', 'riders', 'support'
   const [captainDutyFilter, setCaptainDutyFilter] = useState('all'); // 'all', 'online', 'offline', 'suspended'
   const [loading, setLoading] = useState(true);
   const [selectedRiderForDeactivate, setSelectedRiderForDeactivate] = useState(null);
@@ -47,6 +52,22 @@ export default function AdminDashboard() {
       return [];
     }
   });
+
+  // Support Tickets State
+  const [supportTickets, setSupportTickets] = useState(() => {
+    try {
+      const raw = localStorage.getItem('ridex_support_tickets');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [ticketSearch, setTicketSearch] = useState('');
+  const [ticketFilter, setTicketFilter] = useState('all'); // 'all', 'open', 'resolved'
+  const [selectedTicketToResolve, setSelectedTicketToResolve] = useState(null);
+  const [adminResolutionNote, setAdminResolutionNote] = useState('');
+  const [refundAmountToWallet, setRefundAmountToWallet] = useState('');
+  const [autoCreditWallet, setAutoCreditWallet] = useState(false);
 
   useEffect(() => {
     const fetchAdminData = async () => {
@@ -75,11 +96,14 @@ export default function AdminDashboard() {
     fetchAdminData();
     const interval = setInterval(fetchAdminData, 6000);
 
-    // Listen for real-time duty status changes from Captains
+    // Listen for real-time duty status changes from Captains & Support Tickets
     const handleStorageSync = () => {
       try {
         const raw = localStorage.getItem('fleetcorp_registered_users');
         if (raw) setLocalUsersState(JSON.parse(raw));
+
+        const rawT = localStorage.getItem('ridex_support_tickets');
+        if (rawT) setSupportTickets(JSON.parse(rawT));
       } catch (e) {}
     };
 
@@ -92,6 +116,14 @@ export default function AdminDashboard() {
           handleStorageSync();
           fetchAdminData();
         }
+        if (msg.data?.type === 'NEW_SUPPORT_TICKET') {
+          try {
+            const raw = localStorage.getItem('ridex_support_tickets');
+            if (raw) setSupportTickets(JSON.parse(raw));
+            setToastNotice(`🔔 New Support Ticket #${msg.data.data?.id} submitted by ${msg.data.data?.userName || 'User'} (${msg.data.data?.category || 'Billing'})`);
+            setTimeout(() => setToastNotice(null), 6000);
+          } catch (e) {}
+        }
       };
     }
 
@@ -101,6 +133,92 @@ export default function AdminDashboard() {
       if (channel) channel.close();
     };
   }, []);
+
+  const handleResolveTicket = (ticketId) => {
+    try {
+      const allTickets = JSON.parse(localStorage.getItem('ridex_support_tickets') || '[]');
+      const targetIndex = allTickets.findIndex(t => t.id === ticketId);
+      if (targetIndex === -1) return;
+
+      const target = allTickets[targetIndex];
+      const reply = adminResolutionNote.trim() || "Dispute verified and resolved by Admin Support.";
+      const refundAmt = Number(refundAmountToWallet) || 0;
+
+      const updatedTicket = {
+        ...target,
+        status: 'resolved',
+        adminReply: reply,
+        refundAmount: autoCreditWallet ? refundAmt : 0,
+        resolvedAt: new Date().toISOString()
+      };
+
+      allTickets[targetIndex] = updatedTicket;
+      localStorage.setItem('ridex_support_tickets', JSON.stringify(allTickets));
+      setSupportTickets(allTickets);
+
+      const riderKey = (target.userEmail || target.userPhone || 'user').toLowerCase();
+
+      // If auto refund is enabled and amount > 0, credit rider's wallet
+      if (autoCreditWallet && refundAmt > 0) {
+        const currentBal = Number(localStorage.getItem(`ridex_wallet_balance_${riderKey}`) || 1500);
+        const newBal = currentBal + refundAmt;
+        localStorage.setItem(`ridex_wallet_balance_${riderKey}`, String(newBal));
+
+        // Add to rider passbook
+        const passbookKey = `ridex_wallet_recharges_${riderKey}`;
+        const passbook = JSON.parse(localStorage.getItem(passbookKey) || '[]');
+        passbook.unshift({
+          id: 'REFUND-' + ticketId,
+          type: 'CREDIT',
+          title: `Support Refund • Ticket #${ticketId}`,
+          subtitle: reply,
+          amount: refundAmt,
+          date: new Date().toISOString(),
+          timestamp: Date.now()
+        });
+        localStorage.setItem(passbookKey, JSON.stringify(passbook));
+      }
+
+      // Add Notification for Rider under Profile -> Notifications
+      const notifKey = `ridex_user_notifications_${riderKey}`;
+      const notifs = JSON.parse(localStorage.getItem(notifKey) || '[]');
+      const newNotif = {
+        id: 'notif_ticket_' + ticketId + '_' + Date.now(),
+        title: `🎫 Support Ticket #${ticketId} Resolved!`,
+        desc: `Your issue regarding "${typeof target.subject === 'object' ? target.subject?.title : target.subject}" has been resolved by Admin. Resolution: ${reply}${autoCreditWallet && refundAmt > 0 ? ` (₹${refundAmt} credited to your RideX Wallet)` : ''}`,
+        time: 'Just now',
+        type: 'support_resolved',
+        timestamp: Date.now()
+      };
+      localStorage.setItem(notifKey, JSON.stringify([newNotif, ...notifs]));
+
+      // Broadcast event to notify rider in real time
+      if ('BroadcastChannel' in window) {
+        const ch = new BroadcastChannel('ridex_dispatch_channel');
+        ch.postMessage({
+          type: 'SUPPORT_TICKET_RESOLVED',
+          data: {
+            ticketId,
+            riderKey,
+            riderEmail: target.userEmail,
+            riderPhone: target.userPhone,
+            notification: newNotif,
+            refundAmount: autoCreditWallet ? refundAmt : 0
+          }
+        });
+        ch.close();
+      }
+
+      setToastNotice(`✅ Ticket #${ticketId} marked as Resolved & Rider notified!`);
+      setSelectedTicketToResolve(null);
+      setAdminResolutionNote('');
+      setRefundAmountToWallet('');
+      setAutoCreditWallet(false);
+      setTimeout(() => setToastNotice(null), 4000);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Load strictly REAL registered captains from localStorage and backend
   let localRegisteredUsers = [];
@@ -655,20 +773,20 @@ export default function AdminDashboard() {
           />
 
           {/* Directory Filter Tabs */}
-          <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+          <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto">
             <button
               onClick={() => setActiveTab('all')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                 activeTab === 'all'
                   ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
                   : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              📊 Both Directories
+              📊 All Sections
             </button>
             <button
               onClick={() => setActiveTab('captains')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 activeTab === 'captains'
                   ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                   : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -678,13 +796,29 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => setActiveTab('riders')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
                 activeTab === 'riders'
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
                   : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               👤 Rider Details ({riderList.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('support')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                activeTab === 'support'
+                  ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
+                  : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Ticket className="w-3.5 h-3.5" />
+              <span>🎫 Help & Support Desk ({supportTickets.length})</span>
+              {supportTickets.filter(t => t.status === 'open').length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">
+                  {supportTickets.filter(t => t.status === 'open').length} Open
+                </span>
+              )}
             </button>
           </div>
 
@@ -1144,8 +1278,299 @@ export default function AdminDashboard() {
             </div>
           )}
 
+          {/* ========================================================= */}
+          {/* SECTION 3: HELP & SUPPORT DISPATCH DESK                   */}
+          {/* ========================================================= */}
+          {(activeTab === 'all' || activeTab === 'support') && (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <h3 className="font-extrabold text-xl text-slate-900 dark:text-white flex items-center gap-2">
+                    <Ticket className="w-5 h-5 text-rose-500" />
+                    Help & Support Dispatch Desk
+                    {supportTickets.filter(t => t.status === 'open').length > 0 && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-black animate-pulse">
+                        {supportTickets.filter(t => t.status === 'open').length} Action Required
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Live customer tickets, ride fare disputes, captain reports, and automated wallet refund processing
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:w-64">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search ticket #, rider, issue..."
+                      value={ticketSearch}
+                      onChange={(e) => setTicketSearch(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500"
+                    />
+                  </div>
+
+                  <select
+                    value={ticketFilter}
+                    onChange={(e) => setTicketFilter(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-300 outline-none"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="open">Open / In Review</option>
+                    <option value="resolved">Resolved</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Tickets List */}
+              {(() => {
+                const filtered = supportTickets.filter(t => {
+                  if (ticketFilter === 'open' && t.status === 'resolved') return false;
+                  if (ticketFilter === 'resolved' && t.status !== 'resolved') return false;
+                  if (ticketSearch.trim()) {
+                    const q = ticketSearch.toLowerCase();
+                    const matchId = (t.id || '').toLowerCase().includes(q);
+                    const matchUser = (t.userName || '').toLowerCase().includes(q);
+                    const matchEmail = (t.userEmail || '').toLowerCase().includes(q);
+                    const matchSub = (typeof t.subject === 'object' ? t.subject?.title : t.subject || '').toLowerCase().includes(q);
+                    const matchDesc = (t.description || '').toLowerCase().includes(q);
+                    if (!matchId && !matchUser && !matchEmail && !matchSub && !matchDesc) return false;
+                  }
+                  return true;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="p-8 text-center space-y-2 rounded-3xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800">
+                      <Ticket className="w-10 h-10 text-slate-400 mx-auto" />
+                      <p className="font-extrabold text-sm text-slate-800 dark:text-slate-200">No Support Tickets Found</p>
+                      <p className="text-xs text-slate-500">All customer inquiries & disputes are currently resolved.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    {filtered.map((t) => (
+                      <div
+                        key={t.id}
+                        className={`p-4 rounded-3xl border transition-all shadow-sm ${
+                          t.status === 'resolved'
+                            ? 'border-emerald-500/30 bg-white dark:bg-slate-900'
+                            : 'border-rose-500/40 bg-rose-50/20 dark:bg-rose-950/10'
+                        } space-y-3`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs font-black text-rose-600 dark:text-rose-400">#{t.id}</span>
+                              <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase">
+                                {t.userRole || 'rider'}
+                              </span>
+                            </div>
+                            <h4 className="font-extrabold text-sm text-slate-900 dark:text-white mt-0.5">{t.userName || 'Anonymous Passenger'}</h4>
+                            <p className="text-[11px] text-slate-500">{t.userEmail} • {t.userPhone}</p>
+                          </div>
+
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                            t.status === 'resolved'
+                              ? 'bg-emerald-500 text-white shadow-xs'
+                              : 'bg-rose-500 text-white shadow-xs animate-pulse'
+                          }`}>
+                            {t.status === 'resolved' ? '✓ Resolved' : '● Open / In Review'}
+                          </span>
+                        </div>
+
+                        <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                          <p className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <span className="text-amber-500">📌</span>
+                            {typeof t.subject === 'object' ? t.subject?.title : t.subject}
+                          </p>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                            {t.description}
+                          </p>
+
+                          {t.attachment && (
+                            <div className="pt-1">
+                              <p className="text-[10px] font-bold text-slate-400 mb-1">Attached Screenshot:</p>
+                              <img src={t.attachment} alt="Issue evidence" className="h-24 rounded-xl border border-slate-300 dark:border-slate-700 object-cover" />
+                            </div>
+                          )}
+                        </div>
+
+                        {t.status === 'resolved' ? (
+                          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-xs space-y-1">
+                            <p className="font-black">🛡️ Admin Resolution:</p>
+                            <p className="leading-relaxed text-[11px]">{t.adminReply}</p>
+                            {t.refundAmount > 0 && (
+                              <p className="font-black text-emerald-600 dark:text-emerald-400 text-[11px] pt-0.5">
+                                💰 ₹{t.refundAmount} Refund Credited to Wallet
+                              </p>
+                            )}
+                            <p className="text-[10px] text-slate-400 pt-0.5">
+                              Resolved at: {new Date(t.resolvedAt).toLocaleString()}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 pt-1">
+                            <button
+                              onClick={() => {
+                                setSelectedTicketToResolve(t);
+                                setAdminResolutionNote(
+                                  (t.subject || '').toLowerCase().includes('fare')
+                                    ? "Dispute investigated and verified. ₹45 excess fare credited to your RideX Wallet."
+                                    : "Issue reviewed by Admin Dispatch. Action has been taken and your account is updated."
+                                );
+                                setRefundAmountToWallet((t.subject || '').toLowerCase().includes('fare') ? "45" : "0");
+                                setAutoCreditWallet((t.subject || '').toLowerCase().includes('fare'));
+                              }}
+                              className="w-full py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer hover:scale-[1.01]"
+                            >
+                              <span>⚡ Review & Solve Ticket</span>
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
         </main>
       </div>
+
+      {/* Solve Support Ticket Modal */}
+      {selectedTicketToResolve && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 space-y-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="font-mono text-xs font-black text-rose-600 dark:text-rose-400">#{selectedTicketToResolve.id}</span>
+                <h3 className="font-black text-lg text-slate-900 dark:text-white">Resolve Customer Inquiry</h3>
+                <p className="text-xs text-slate-500">{selectedTicketToResolve.userName} ({selectedTicketToResolve.userEmail})</p>
+              </div>
+              <button
+                onClick={() => setSelectedTicketToResolve(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-1">
+              <p className="text-[11px] font-bold uppercase text-slate-400">Customer Issue Subject</p>
+              <p className="text-xs font-extrabold text-slate-900 dark:text-white">
+                {typeof selectedTicketToResolve.subject === 'object' ? selectedTicketToResolve.subject?.title : selectedTicketToResolve.subject}
+              </p>
+              <p className="text-xs text-slate-600 dark:text-slate-300 pt-1">
+                "{selectedTicketToResolve.description}"
+              </p>
+            </div>
+
+            {/* Quick Template Replies */}
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold uppercase text-slate-400">Quick Response Templates</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminResolutionNote("Dispute verified. ₹50 fare adjustment credited to your RideX Wallet.");
+                    setRefundAmountToWallet("50");
+                    setAutoCreditWallet(true);
+                  }}
+                  className="px-2.5 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500 hover:text-slate-950 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[11px] font-bold cursor-pointer transition-all"
+                >
+                  💰 ₹50 Fare Refund
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminResolutionNote("We have verified captain conduct and issued a formal disciplinary strike. 20% discount applied to your next trip.");
+                    setRefundAmountToWallet("0");
+                    setAutoCreditWallet(false);
+                  }}
+                  className="px-2.5 py-1 rounded-xl bg-purple-500/10 hover:bg-purple-500 hover:text-white text-purple-600 dark:text-purple-400 border border-purple-500/20 text-[11px] font-bold cursor-pointer transition-all"
+                >
+                  ⚠️ Captain Warning
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdminResolutionNote("Trip GPS telemetry verified as accurate based on actual route taken. All calculations comply with standard tariff.");
+                    setRefundAmountToWallet("0");
+                    setAutoCreditWallet(false);
+                  }}
+                  className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-bold cursor-pointer transition-all"
+                >
+                  ✔️ Fare Verified Correct
+                </button>
+              </div>
+            </div>
+
+            {/* Resolution Note Textarea */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-extrabold text-slate-800 dark:text-slate-200">
+                Official Resolution Message (Will appear in Rider's Profile Notifications)
+              </label>
+              <textarea
+                rows={3}
+                value={adminResolutionNote}
+                onChange={(e) => setAdminResolutionNote(e.target.value)}
+                placeholder="Write resolution note here..."
+                className="w-full p-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500"
+              />
+            </div>
+
+            {/* Wallet Refund option */}
+            <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800/40 space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoCreditWallet}
+                  onChange={(e) => setAutoCreditWallet(e.target.checked)}
+                  className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500"
+                />
+                <span className="text-xs font-bold text-slate-900 dark:text-white">Credit Refund to Rider's RideX Wallet</span>
+              </label>
+
+              {autoCreditWallet && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300">Amount (₹):</span>
+                  <input
+                    type="number"
+                    value={refundAmountToWallet}
+                    onChange={(e) => setRefundAmountToWallet(e.target.value)}
+                    placeholder="Enter amount"
+                    className="w-28 px-3 py-1.5 rounded-xl border border-amber-400 dark:border-amber-700 bg-white dark:bg-slate-900 text-xs font-black text-slate-900 dark:text-white outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedTicketToResolve(null)}
+                className="flex-1 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleResolveTicket(selectedTicketToResolve.id)}
+                className="flex-1 py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-black shadow-lg shadow-rose-600/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:scale-[1.01]"
+              >
+                <span>Mark Resolved & Notify Rider ➔</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Deactivate Rider Modal */}
       {selectedRiderForDeactivate && (

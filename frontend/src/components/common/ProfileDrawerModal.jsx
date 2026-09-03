@@ -141,6 +141,20 @@ export default function ProfileDrawerModal({ onClose }) {
     };
 
     loadProfileNotifs();
+
+    let ch;
+    if ('BroadcastChannel' in window) {
+      ch = new BroadcastChannel('ridex_dispatch_channel');
+      ch.onmessage = (event) => {
+        if (event.data?.type === 'SUPPORT_TICKET_RESOLVED' || event.data?.type === 'NEW_SUPPORT_TICKET') {
+          loadProfileNotifs();
+        }
+      };
+    }
+
+    return () => {
+      if (ch) ch.close();
+    };
   }, [user, activeSubModal]);
 
   const handleLogout = () => {
@@ -165,6 +179,7 @@ export default function ProfileDrawerModal({ onClose }) {
   const [supportInput, setSupportInput] = useState("");
   const [attachedImagePreview, setAttachedImagePreview] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
+  const [supportSuggestions, setSupportSuggestions] = useState([]);
 
   // Wallet & Add Money state
   const getInitialWalletBalance = () => {
@@ -2038,6 +2053,22 @@ export default function ProfileDrawerModal({ onClose }) {
                         </div>
                       )}
 
+                      {/* Contextual Smart Suggestion Chips */}
+                      {supportSuggestions.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1 pb-1">
+                          {supportSuggestions.map((chip, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => handleSelectSuggestion(chip)}
+                              className="px-2.5 py-1.5 rounded-full text-[11px] font-bold bg-amber-500/15 hover:bg-amber-500 hover:text-slate-950 text-amber-600 dark:text-amber-400 border border-amber-500/30 transition-all cursor-pointer shadow-xs"
+                            >
+                              ⚡ {chip}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Bottom Chat Input */}
                       <form onSubmit={handleSendMessage} className="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center gap-2 shrink-0">
                         <input
@@ -2082,43 +2113,104 @@ export default function ProfileDrawerModal({ onClose }) {
                         <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                           <Ticket className="w-4 h-4 text-amber-500" /> Your Support Tickets
                         </h3>
-                        <span className="text-[10px] text-slate-400 font-mono">Live Support</span>
+                        <span className="text-[10px] text-emerald-500 font-mono font-bold">● Live Support</span>
                       </div>
 
                       {(() => {
                         let userTickets = [];
                         try {
                           const all = JSON.parse(localStorage.getItem('ridex_support_tickets') || '[]');
-                          userTickets = all;
+                          const myEmail = (user?.email || '').toLowerCase();
+                          const myPhone = (user?.phone || '').replace(/[^0-9]/g, '').slice(-10);
+                          userTickets = all.filter(t => {
+                            const tEmail = (t.userEmail || '').toLowerCase();
+                            const tPhone = (t.userPhone || '').replace(/[^0-9]/g, '').slice(-10);
+                            if (myEmail && tEmail && myEmail === tEmail) return true;
+                            if (myPhone && tPhone && myPhone === tPhone) return true;
+                            if (!tEmail && !tPhone) return true;
+                            return true;
+                          });
                         } catch (e) {}
 
                         if (userTickets.length === 0) {
                           return (
                             <div className="p-6 text-center space-y-2 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
                               <p className="text-xs font-bold text-slate-700 dark:text-slate-300">No Open Tickets</p>
-                              <p className="text-[11px] text-slate-500">You do not have any unresolved support tickets.</p>
+                              <p className="text-[11px] text-slate-500">You do not have any unresolved support inquiries.</p>
                             </div>
                           );
                         }
 
                         return userTickets.map((t, idx) => (
-                          <div key={idx} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 space-y-2">
+                          <div 
+                            key={idx} 
+                            className={`p-4 rounded-2xl border transition-all ${
+                              t.status === 'resolved'
+                                ? 'border-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-950/20'
+                                : 'border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/20'
+                            } space-y-2`}
+                          >
                             <div className="flex justify-between items-start">
-                              <span className="font-mono text-xs font-bold text-amber-600 dark:text-amber-400">#{t.id}</span>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              <div>
+                                <span className="font-mono text-xs font-black text-slate-900 dark:text-white">#{t.id}</span>
+                                <p className="text-[10px] text-slate-400 font-medium">
+                                  {t.createdAt ? new Date(t.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Recent'}
+                                </p>
+                              </div>
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${
                                 t.status === 'resolved' 
-                                  ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                                  : 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                                  ? 'bg-emerald-500 text-white shadow-xs'
+                                  : 'bg-amber-500 text-slate-950 shadow-xs animate-pulse'
                               }`}>
-                                {t.status === 'resolved' ? 'Resolved' : 'In Review'}
+                                {t.status === 'resolved' ? '✓ Resolved' : '● In Review'}
                               </span>
                             </div>
-                            <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+
+                            <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
                               {typeof t.subject === 'object' ? t.subject?.title : t.subject}
                             </p>
-                            <p className="text-[11px] text-slate-400">
-                              {t.description || "Our team is reviewing your ticket telemetry."}
+
+                            <p className="text-[11px] text-slate-600 dark:text-slate-400 bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                              <span className="font-semibold text-slate-500">Your Query: </span>
+                              {t.description || "User inquiry submitted."}
                             </p>
+
+                            {t.status === 'resolved' ? (
+                              <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-300 text-[11px] space-y-1">
+                                <p className="font-extrabold flex items-center gap-1">
+                                  🛡️ Admin Resolution:
+                                </p>
+                                <p className="leading-relaxed">
+                                  {t.adminReply || "Your issue has been investigated and resolved by RideX Dispatch Team."}
+                                </p>
+                                {t.refundAmount > 0 && (
+                                  <p className="font-black text-emerald-600 dark:text-emerald-400 pt-0.5">
+                                    💰 +₹{t.refundAmount} Refund credited to your RideX Wallet!
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 text-[10px] flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                                <span>Admin team is reviewing your ride logs & fare telemetry.</span>
+                              </div>
+                            )}
+
+                            <button
+                              onClick={() => {
+                                setShowTicketsModal(false);
+                                if (t.messages && t.messages.length > 0) {
+                                  setChatMessages(t.messages);
+                                } else {
+                                  openSupportChat(typeof t.subject === 'object' ? t.subject?.title : t.subject);
+                                }
+                                setIsSupportChatOpen(true);
+                              }}
+                              className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 text-amber-500" />
+                              <span>View Support Chat</span>
+                            </button>
                           </div>
                         ));
                       })()}
@@ -2229,7 +2321,7 @@ export default function ProfileDrawerModal({ onClose }) {
                           <button
                             key={i}
                             onClick={() => {
-                              setSelectedFaqArticle(getFaqResolution(sub, selectedHelpTopic.title));
+                              openSupportChat(selectedHelpTopic.title, sub);
                             }}
                             className="w-full py-3.5 px-4 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group cursor-pointer"
                           >
@@ -2275,9 +2367,7 @@ export default function ProfileDrawerModal({ onClose }) {
                             <button
                               key={topic.id}
                               onClick={() => {
-                                setSelectedHelpTopic(topic);
-                                setSelectedFaqArticle(null);
-                                setTicketRaised(false);
+                                openSupportChat(topic.title);
                               }}
                               className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group cursor-pointer"
                             >
@@ -2290,11 +2380,16 @@ export default function ProfileDrawerModal({ onClose }) {
                                     {topic.title}
                                   </span>
                                   <span className="text-[11px] text-slate-400 font-normal">
-                                    {topic.subIssues.length} common issues & resolutions
+                                    Click to launch 24x7 AI Support Chat
                                   </span>
                                 </div>
                               </div>
-                              <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all" />
+                              <div className="flex items-center gap-1.5">
+                                <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-black">
+                                  AI Chat 💬
+                                </span>
+                                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all" />
+                              </div>
                             </button>
                           ))}
                         </div>
