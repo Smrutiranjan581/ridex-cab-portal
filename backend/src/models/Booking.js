@@ -8,17 +8,21 @@ const bookingSchema = new mongoose.Schema(
       unique: true
     },
     rider: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      type: mongoose.Schema.Types.Mixed,
       required: true
     },
+    riderDetails: {
+      name: { type: String, default: "Corporate Rider" },
+      phone: { type: String, default: "+91 9437088776" },
+      email: { type: String, default: "rider@cab.com" },
+      avatar: { type: String, default: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" },
+      company: { type: String, default: "Individual Rider" }
+    },
     captain: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User"
+      type: mongoose.Schema.Types.Mixed
     },
     captainProfile: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "CaptainProfile"
+      type: mongoose.Schema.Types.Mixed
     },
     pickup: {
       address: { type: String, required: true },

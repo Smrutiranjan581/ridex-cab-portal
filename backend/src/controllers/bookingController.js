@@ -18,10 +18,11 @@ exports.getPendingDispatches = async (req, res) => {
     let pendingBookings = [];
     try {
       pendingBookings = await Booking.find({ status: "pending_acceptance" })
-        .populate("rider", "name phone email avatar company")
         .sort({ createdAt: -1 })
         .limit(10);
-    } catch (e) {}
+    } catch (e) {
+      console.error("Error finding pending dispatches:", e.message);
+    }
 
     res.json({
       success: true,
@@ -45,17 +46,23 @@ exports.acceptBooking = async (req, res) => {
 
     let capProf = null;
     try {
-      capProf = await CaptainProfile.findOne({ user: req.user._id });
+      if (req.user?._id) {
+        capProf = await CaptainProfile.findOne({ user: req.user._id });
+      }
     } catch (e) {}
+
+    const captainUser = req.user || {
+      _id: "captain_123",
+      name: "Rajesh Mohapatra",
+      phone: "+91 9123456780",
+      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80"
+    };
 
     if (booking) {
       booking.status = "captain_assigned";
-      booking.captain = req.user._id;
+      booking.captain = captainUser._id;
       if (capProf) booking.captainProfile = capProf._id;
       await booking.save();
-      await booking.populate("rider", "name phone email avatar company");
-      await booking.populate("captain", "name phone avatar");
-      if (booking.captainProfile) await booking.populate("captainProfile");
     }
 
     res.json({
@@ -63,8 +70,9 @@ exports.acceptBooking = async (req, res) => {
       message: "Ride accepted! Captain is en route.",
       booking: booking || {
         _id: id,
+        bookingId: id,
         status: "captain_assigned",
-        captain: req.user,
+        captain: captainUser,
         captainProfile: capProf
       }
     });
@@ -91,9 +99,24 @@ exports.createBooking = async (req, res) => {
     const fare = calculateFare(Number(distanceKm), Number(estimatedDurationMins), vehicleType);
     const bookingId = "RDX-" + Math.floor(1000 + Math.random() * 9000);
 
+    const riderUser = req.user || {
+      _id: "rider_" + Date.now(),
+      name: "Corporate Rider",
+      phone: "+91 9437088776",
+      email: "rider@cab.com",
+      company: "Individual Rider"
+    };
+
     const bookingData = {
       bookingId,
-      rider: req.user._id,
+      rider: riderUser._id,
+      riderDetails: {
+        name: riderUser.name || "Corporate Rider",
+        phone: riderUser.phone || "+91 9437088776",
+        email: riderUser.email || "rider@cab.com",
+        avatar: riderUser.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
+        company: riderUser.company || "Individual Rider"
+      },
       pickup: typeof pickup === "string" ? { address: pickup, lat: 20.2961, lng: 85.8245 } : pickup,
       drop: typeof drop === "string" ? { address: drop, lat: 20.3541, lng: 85.8195 } : drop,
       scheduledDate: scheduledDate || new Date().toISOString().split("T")[0],
@@ -118,8 +141,8 @@ exports.createBooking = async (req, res) => {
     let booking;
     try {
       booking = await Booking.create(bookingData);
-      await booking.populate("rider", "name phone email avatar company");
     } catch (e) {
+      console.error("Booking.create error:", e.message);
       booking = { ...bookingData, _id: "bk_" + Date.now(), createdAt: new Date() };
     }
 
