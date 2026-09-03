@@ -6,6 +6,7 @@ import RouteMapPreview from '../../components/booking/RouteMapPreview';
 import SearchingRadar from '../../components/booking/SearchingRadar';
 import { ShieldCheck, Zap, Navigation, Award, Clock, AlertTriangle, ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 
 export default function BookRidePage() {
   const { user } = useAuth();
@@ -27,12 +28,31 @@ export default function BookRidePage() {
 
   const navigate = useNavigate();
 
-  const handleStartBooking = (bookingData) => {
-    setCurrentBooking(bookingData);
-    setIsSearching(true);
+  const handleStartBooking = async (bookingData) => {
+    setIsSubmitting(true);
+    let createdBooking = null;
+
+    try {
+      const res = await api.post('/bookings/create', {
+        pickup: bookingData.pickup,
+        drop: bookingData.drop,
+        vehicleType: bookingData.vehicleType,
+        distanceKm: bookingData.distanceKm,
+        estimatedDurationMins: bookingData.estimatedDurationMins,
+        specialInstructions: bookingData.specialInstructions || '',
+        passengerCount: bookingData.passengerCount || 1,
+        paymentMethod: bookingData.paymentMethod || 'corporate_wallet'
+      });
+      if (res.data?.success && res.data.booking) {
+        createdBooking = res.data.booking;
+      }
+    } catch (err) {
+      console.warn("Backend booking creation fallback:", err.message);
+    }
 
     const dispatchData = {
-      id: "RDX-" + Math.floor(1000 + Math.random() * 9000),
+      id: createdBooking?.bookingId || ("RDX-" + Math.floor(1000 + Math.random() * 9000)),
+      _id: createdBooking?._id || createdBooking?.bookingId,
       pickup: bookingData.pickup,
       drop: bookingData.drop,
       vehicleType: bookingData.vehicleType,
@@ -40,11 +60,16 @@ export default function BookRidePage() {
       fare: bookingData.fare?.total || Math.round(bookingData.distanceKm * 18 + 90),
       distanceKm: bookingData.distanceKm,
       durationMins: bookingData.estimatedDurationMins,
-      riderName: bookingData.riderName || "Corporate Rider",
-      riderPhone: bookingData.riderPhone || "+91 9437088776",
+      riderName: user?.name || bookingData.riderName || "Corporate Rider",
+      riderPhone: user?.phone || bookingData.riderPhone || "+91 9437088776",
+      otp: createdBooking?.otp || Math.floor(1000 + Math.random() * 9000).toString(),
       status: "pending_acceptance",
       createdAt: new Date().toISOString()
     };
+
+    setCurrentBooking(dispatchData);
+    setIsSearching(true);
+    setIsSubmitting(false);
 
     // Save pending dispatch request so Captain Dashboard can listen and accept
     try {
@@ -62,11 +87,16 @@ export default function BookRidePage() {
     try {
       localStorage.setItem('fleetcorp_active_booking', JSON.stringify(acceptedTrip));
     } catch (e) {}
-    navigate(`/rider/track/${acceptedTrip.bookingId || 'RDX-9188'}`);
+    navigate(`/rider/track/${acceptedTrip.bookingId || acceptedTrip._id || 'RDX-9188'}`);
   };
 
-  const handleCancelSearch = () => {
+  const handleCancelSearch = async () => {
     setIsSearching(false);
+    if (currentBooking?._id) {
+      try {
+        await api.patch(`/bookings/${currentBooking._id}/cancel`, { reason: 'Cancelled by rider during radar search' });
+      } catch (e) {}
+    }
     try {
       localStorage.removeItem('fleetcorp_live_dispatch_request');
       if ('BroadcastChannel' in window) {

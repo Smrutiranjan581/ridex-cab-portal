@@ -13,6 +13,66 @@ exports.estimateFare = async (req, res) => {
   }
 };
 
+exports.getPendingDispatches = async (req, res) => {
+  try {
+    let pendingBookings = [];
+    try {
+      pendingBookings = await Booking.find({ status: "pending_acceptance" })
+        .populate("rider", "name phone email avatar company")
+        .sort({ createdAt: -1 })
+        .limit(10);
+    } catch (e) {}
+
+    res.json({
+      success: true,
+      count: pendingBookings.length,
+      dispatches: pendingBookings
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.acceptBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    let booking = null;
+    try {
+      booking = await Booking.findOne({
+        $or: [{ _id: id }, { bookingId: id }]
+      });
+    } catch (e) {}
+
+    let capProf = null;
+    try {
+      capProf = await CaptainProfile.findOne({ user: req.user._id });
+    } catch (e) {}
+
+    if (booking) {
+      booking.status = "captain_assigned";
+      booking.captain = req.user._id;
+      if (capProf) booking.captainProfile = capProf._id;
+      await booking.save();
+      await booking.populate("rider", "name phone email avatar company");
+      await booking.populate("captain", "name phone avatar");
+      if (booking.captainProfile) await booking.populate("captainProfile");
+    }
+
+    res.json({
+      success: true,
+      message: "Ride accepted! Captain is en route.",
+      booking: booking || {
+        _id: id,
+        status: "captain_assigned",
+        captain: req.user,
+        captainProfile: capProf
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.createBooking = async (req, res) => {
   try {
     const {
@@ -29,7 +89,7 @@ exports.createBooking = async (req, res) => {
     } = req.body;
 
     const fare = calculateFare(Number(distanceKm), Number(estimatedDurationMins), vehicleType);
-    const bookingId = "FLT-" + Math.floor(1000 + Math.random() * 9000);
+    const bookingId = "RDX-" + Math.floor(1000 + Math.random() * 9000);
 
     const bookingData = {
       bookingId,
@@ -51,29 +111,21 @@ exports.createBooking = async (req, res) => {
         total: fare.total
       },
       paymentMethod,
-      status: "captain_arriving",
-      otp: Math.floor(1000 + Math.random() * 9000).toString(),
-      captain: {
-        name: "Rajesh Mohapatra",
-        phone: "+91 9437012345",
-        avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80"
-      },
-      captainProfile: {
-        vehicle: { model: "Swift Dzire", numberPlate: "OD-02-BA-9876", color: "Pearl White", category: vehicleType },
-        rating: 4.92
-      }
+      status: "pending_acceptance",
+      otp: Math.floor(1000 + Math.random() * 9000).toString()
     };
 
     let booking;
     try {
       booking = await Booking.create(bookingData);
+      await booking.populate("rider", "name phone email avatar company");
     } catch (e) {
       booking = { ...bookingData, _id: "bk_" + Date.now(), createdAt: new Date() };
     }
 
     res.status(201).json({
       success: true,
-      message: "Ride booked successfully! Captain assigned.",
+      message: "Ride request broadcasted to all nearby captains!",
       booking
     });
   } catch (error) {

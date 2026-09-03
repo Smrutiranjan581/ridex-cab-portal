@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Navigation, X, ShieldCheck, Check, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import CancelRideModal from './CancelRideModal';
+import api from '../../services/api';
 
 export default function SearchingRadar({ bookingData, onCancel, onCaptainAccepted }) {
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -10,9 +11,9 @@ export default function SearchingRadar({ bookingData, onCancel, onCaptainAccepte
 
   const tickerMessages = [
     "Broadcasting request to nearby verified captains...",
-    "3 Captains nearby on radar (within 2.5 KM)...",
-    "Waiting for captain to accept dispatch...",
-    "Captain reviewing route and fare..."
+    "Live GPS radar searching active captains...",
+    "Waiting for nearby captain to accept dispatch...",
+    "Captain reviewing route and estimated fare..."
   ];
 
   useEffect(() => {
@@ -24,7 +25,47 @@ export default function SearchingRadar({ bookingData, onCancel, onCaptainAccepte
       setSecondsElapsed((prev) => prev + 1);
     }, 1000);
 
-    // Check localStorage for manual Captain acceptance from another tab / dashboard
+    // 1. Cloud API polling for live multi-device captain acceptance
+    const checkCloudAcceptance = setInterval(async () => {
+      const searchId = bookingData?._id || bookingData?.id;
+      if (!searchId) return;
+
+      try {
+        const res = await api.get(`/bookings/${searchId}`);
+        if (res.data?.success && res.data.booking) {
+          const b = res.data.booking;
+          if (b.status === 'captain_assigned' || b.status === 'captain_arriving' || b.status === 'trip_started') {
+            const acceptedData = {
+              bookingId: b.bookingId || b._id,
+              _id: b._id,
+              pickup: typeof b.pickup === 'string' ? b.pickup : b.pickup?.address,
+              drop: typeof b.drop === 'string' ? b.drop : b.drop?.address,
+              fare: b.fare?.total || b.fare,
+              distanceKm: b.distanceKm,
+              category: b.vehicleType === 'bike' ? 'Bike Moto' : b.vehicleType === 'auto' ? 'Auto TukTuk' : 'Sedan Prime',
+              riderName: b.rider?.name || bookingData?.riderName || 'Corporate Rider',
+              riderPhone: b.rider?.phone || bookingData?.riderPhone || '+91 9437088776',
+              otp: b.otp || bookingData?.otp || '4921',
+              status: b.status,
+              captain: {
+                name: b.captain?.name || 'Rajesh Mohapatra',
+                phone: b.captain?.phone || '+91 9123456780',
+                rating: b.captainProfile?.rating || 4.95,
+                trips: b.captainProfile?.totalTrips || 142
+              },
+              vehicle: {
+                category: b.captainProfile?.vehicle?.category || b.vehicleType || 'sedan',
+                model: b.captainProfile?.vehicle?.model || 'Maruti Swift Dzire',
+                numberPlate: b.captainProfile?.vehicle?.numberPlate || 'OD-02-BA-9876'
+              }
+            };
+            onCaptainAccepted(acceptedData);
+          }
+        }
+      } catch (e) {}
+    }, 2000);
+
+    // 2. Check localStorage for local/tab acceptance fallback
     const checkAcceptance = setInterval(() => {
       try {
         const liveTrip = localStorage.getItem('fleetcorp_live_active_trip');
@@ -50,10 +91,11 @@ export default function SearchingRadar({ bookingData, onCancel, onCaptainAccepte
     return () => {
       clearInterval(tickerInterval);
       clearInterval(timer);
+      clearInterval(checkCloudAcceptance);
       clearInterval(checkAcceptance);
       if (channel) channel.close();
     };
-  }, [onCaptainAccepted, tickerMessages.length]);
+  }, [bookingData, onCaptainAccepted, tickerMessages.length]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in">

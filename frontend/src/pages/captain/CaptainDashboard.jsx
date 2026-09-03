@@ -137,14 +137,40 @@ export default function CaptainDashboard() {
     };
   }, [user]);
 
-  // Listen ONLY for Real Ride Bookings from Riders
+  // Listen for Real Ride Bookings from Riders (both from Cloud Backend API and local)
   useEffect(() => {
     if (!isOnline || activeTrip) {
       setIncomingRequest(null);
       return;
     }
 
-    const checkPendingRequests = () => {
+    const checkPendingRequests = async () => {
+      // 1. Fetch live cloud pending dispatches from MongoDB
+      try {
+        const res = await api.get('/bookings/pending-dispatch');
+        if (res.data?.success && Array.isArray(res.data.dispatches) && res.data.dispatches.length > 0) {
+          const latest = res.data.dispatches[0];
+          const dispatchPayload = {
+            id: latest.bookingId || latest._id,
+            _id: latest._id,
+            pickup: typeof latest.pickup === 'string' ? latest.pickup : latest.pickup?.address,
+            drop: typeof latest.drop === 'string' ? latest.drop : latest.drop?.address,
+            fare: latest.fare?.total || latest.fare,
+            distanceKm: latest.distanceKm,
+            category: latest.vehicleType === 'bike' ? 'Bike Moto' : latest.vehicleType === 'auto' ? 'Auto TukTuk' : 'Sedan Prime',
+            vehicleType: latest.vehicleType,
+            riderName: latest.rider?.name || "Corporate Rider",
+            riderPhone: latest.rider?.phone || "+91 9437088776",
+            status: "pending_acceptance",
+            otp: latest.otp || "4921",
+            createdAt: latest.createdAt
+          };
+          setIncomingRequest(dispatchPayload);
+          return;
+        }
+      } catch (e) {}
+
+      // 2. Check local storage fallback
       try {
         const storedReq = localStorage.getItem('fleetcorp_live_dispatch_request');
         if (storedReq) {
@@ -159,8 +185,8 @@ export default function CaptainDashboard() {
     // 1. Initial check
     checkPendingRequests();
 
-    // 2. Poll storage every 1.5s
-    const pollInterval = setInterval(checkPendingRequests, 1500);
+    // 2. Poll Cloud API every 2.5s for live cross-device dispatch
+    const pollInterval = setInterval(checkPendingRequests, 2500);
 
     // 3. Listen to cross-window storage events
     const handleStorageChange = (e) => {
@@ -170,7 +196,7 @@ export default function CaptainDashboard() {
     };
     window.addEventListener('storage', handleStorageChange);
 
-    // 4. Listen to BroadcastChannel for instant real-time dispatch
+    // 4. Listen to BroadcastChannel for instant same-browser dispatch
     let channel;
     if ('BroadcastChannel' in window) {
       channel = new BroadcastChannel('ridex_dispatch_channel');
@@ -190,12 +216,24 @@ export default function CaptainDashboard() {
     };
   }, [isOnline, activeTrip]);
 
-  const handleAcceptRide = () => {
+  const handleAcceptRide = async () => {
     if (!incomingRequest) return;
 
-    const assignedOtp = String(Math.floor(1000 + Math.random() * 9000));
+    const assignedOtp = incomingRequest.otp || String(Math.floor(1000 + Math.random() * 9000));
+    const targetId = incomingRequest._id || incomingRequest.id;
+
+    // Call Cloud Backend API to accept the ride in MongoDB
+    try {
+      await api.put(`/bookings/${targetId}/accept`);
+    } catch (e) {
+      try {
+        await api.patch(`/bookings/${targetId}/status`, { status: 'captain_assigned' });
+      } catch (err) {}
+    }
+
     const assignedTrip = {
       bookingId: incomingRequest.id || ("RDX-" + Math.floor(1000 + Math.random() * 9000)),
+      _id: targetId,
       pickup: incomingRequest.pickup,
       drop: incomingRequest.drop,
       fare: incomingRequest.fare,

@@ -85,6 +85,7 @@ const bookingSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
+        "pending_acceptance",
         "booking_confirmed",
         "captain_assigned",
         "captain_arriving",
@@ -92,7 +93,7 @@ const bookingSchema = new mongoose.Schema(
         "trip_completed",
         "cancelled"
       ],
-      default: "booking_confirmed"
+      default: "pending_acceptance"
     },
     cancelledBy: {
       type: String,
