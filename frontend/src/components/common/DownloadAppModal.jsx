@@ -1,12 +1,16 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Smartphone, Download, ShieldCheck, Car, X, QrCode, ArrowRight, CheckCircle2 } from 'lucide-react';
 
 export default function DownloadAppModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-[99999] overflow-y-auto p-3 sm:p-6 flex items-center justify-center bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-      <div className="w-full max-w-lg max-h-[92vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 my-auto">
+  return createPortal(
+    <div 
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-[9999999] overflow-y-auto p-4 sm:p-6 flex items-center justify-center bg-slate-950/85 backdrop-blur-md animate-in fade-in"
+    >
+      <div className="w-full max-w-lg max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden my-auto relative animate-in zoom-in-95">
         
         {/* Header */}
         <div className="p-5 sm:p-6 bg-gradient-to-br from-amber-500/15 via-transparent to-transparent border-b border-slate-100 dark:border-slate-800 relative shrink-0">
@@ -59,7 +63,7 @@ export default function DownloadAppModal({ isOpen, onClose }) {
                 <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 font-medium">
                   <span>v1.0.0</span>
                   <span>•</span>
-                  <span>9.48 MB</span>
+                  <span>25.7 MB</span>
                   <span>•</span>
                   <span className="text-emerald-500 font-bold">Android 8.0+</span>
                 </div>
@@ -97,7 +101,7 @@ export default function DownloadAppModal({ isOpen, onClose }) {
                 <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 font-medium">
                   <span>v1.0.0</span>
                   <span>•</span>
-                  <span>9.48 MB</span>
+                  <span>25.7 MB</span>
                   <span>•</span>
                   <span className="text-emerald-500 font-bold">Android 8.0+</span>
                 </div>
@@ -129,6 +133,7 @@ export default function DownloadAppModal({ isOpen, onClose }) {
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
