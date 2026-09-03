@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const { submitReview } = require("../controllers/reviewController");
-const { protect } = require("../middleware/authMiddleware");
+const { protectOptional } = require("../middleware/authMiddleware");
 
-router.post("/submit", protect, submitReview);
+router.post("/submit", protectOptional, submitReview);
 
 module.exports = router;

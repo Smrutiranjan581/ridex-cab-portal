@@ -106,7 +106,23 @@ const bookingSchema = new mongoose.Schema(
     },
     cancellationReason: String,
     startTime: Date,
-    completedTime: Date
+    completedTime: Date,
+    tip: {
+      type: Number,
+      default: 0
+    },
+    rating: {
+      type: Number,
+      default: null
+    },
+    feedbackTags: {
+      type: [String],
+      default: []
+    },
+    feedbackComment: {
+      type: String,
+      default: ""
+    }
   },
   { timestamps: true }
 );

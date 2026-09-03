@@ -93,3 +93,24 @@ exports.respondToRide = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.getCaptainLedger = async (req, res) => {
+  try {
+    let trips = [];
+    try {
+      trips = await Booking.find({ status: "trip_completed" })
+        .sort({ createdAt: -1 })
+        .limit(50);
+    } catch (e) {
+      console.error("Error finding captain trips:", e.message);
+    }
+
+    res.json({
+      success: true,
+      count: trips.length,
+      trips
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

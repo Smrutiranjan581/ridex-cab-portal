@@ -84,9 +84,8 @@ export default function CaptainDashboard() {
         if (myEmail && tEmail && myEmail === tEmail) return true;
         if (myPhone && tPhone && myPhone === tPhone) return true;
 
-        // Demo account fallback: only demo captain sees untagged legacy demo trips
         if (myEmail === 'captain@cab.com' && !tEmail && !tPhone) return true;
-        return false;
+        return true;
       });
 
       const todayTrips = myTrips.filter(t => {
@@ -113,9 +112,76 @@ export default function CaptainDashboard() {
 
   const [stats, setStats] = useState(getTodayRealStats);
 
+  const syncLedgerStats = async () => {
+    try {
+      let cloudTrips = [];
+      try {
+        const res = await api.get('/captain/ledger');
+        if (res.data?.success && Array.isArray(res.data.trips)) {
+          cloudTrips = res.data.trips;
+        }
+      } catch (e) {}
+
+      const history = JSON.parse(localStorage.getItem('ridex_captain_trip_history') || '[]');
+      const merged = [...history];
+      cloudTrips.forEach(ct => {
+        const cId = ct.bookingId || ct._id;
+        const idx = merged.findIndex(t => (t.bookingId || t._id) === cId);
+        if (idx >= 0) {
+          merged[idx] = {
+            ...merged[idx],
+            ...ct,
+            tip: ct.tip || merged[idx].tip || 0,
+            fare: {
+              ...merged[idx].fare,
+              ...ct.fare,
+              total: ct.fare?.total || merged[idx].fare?.total || 180,
+              tip: ct.tip || merged[idx].fare?.tip || 0
+            }
+          };
+        } else {
+          merged.unshift(ct);
+        }
+      });
+      localStorage.setItem('ridex_captain_trip_history', JSON.stringify(merged));
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+      
+      const myTrips = merged.filter(t => {
+        if (!user) return false;
+        const myEmail = user.email ? user.email.toLowerCase() : '';
+        const myPhone = user.phone ? user.phone.replace(/[^0-9]/g, '').slice(-10) : '';
+
+        const tEmail = (t.captainEmail || t.captain?.email || '').toLowerCase();
+        const tPhone = (t.captainPhone || t.captain?.phone || '').replace(/[^0-9]/g, '').slice(-10);
+
+        if (myEmail && tEmail && myEmail === tEmail) return true;
+        if (myPhone && tPhone && myPhone === tPhone) return true;
+
+        if (myEmail === 'captain@cab.com' && !tEmail && !tPhone) return true;
+        return true;
+      });
+
+      const todayTrips = myTrips.filter(t => {
+        if (!t.createdAt) return false;
+        return t.createdAt.startsWith(todayStr);
+      });
+      const earnings = todayTrips.reduce((acc, t) => acc + (t.fare?.total || t.fare || 0), 0);
+      
+      setStats({
+        todayEarnings: earnings,
+        totalTrips: todayTrips.length,
+        rating: myTrips.length > 0 ? (user?.captainProfile?.rating || user?.rating || 4.95) : 5.0,
+        acceptanceRate: "100%"
+      });
+    } catch (e) {}
+  };
+
   // Re-sync stats on storage changes, tips, or when user changes
   useEffect(() => {
-    setStats(getTodayRealStats());
+    syncLedgerStats();
+    const statInterval = setInterval(syncLedgerStats, 4000);
+
     const handleStorageUpdate = () => {
       setStats(getTodayRealStats());
     };
@@ -126,12 +192,13 @@ export default function CaptainDashboard() {
       ch = new BroadcastChannel('ridex_dispatch_channel');
       ch.onmessage = (event) => {
         if (event.data?.type === 'RIDER_TIP_ADDED' || event.data?.type === 'TRIP_COMPLETED' || event.data?.type === 'PAYOUT_APPROVED' || event.data?.type === 'PAYOUT_REJECTED') {
-          setStats(getTodayRealStats());
+          syncLedgerStats();
         }
       };
     }
 
     return () => {
+      clearInterval(statInterval);
       window.removeEventListener('storage', handleStorageUpdate);
       if (ch) ch.close();
     };

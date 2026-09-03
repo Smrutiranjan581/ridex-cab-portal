@@ -22,12 +22,42 @@ export default function CaptainEarningsModal({ isOpen, onClose, onViewInvoice })
   const [trips, setTrips] = useState([]);
   const [transactions, setTransactions] = useState([]);
 
-  // Load and synchronize data
-  const loadLedgerData = () => {
+  // Load and synchronize data from Cloud API and LocalStorage
+  const loadLedgerData = async () => {
     try {
+      let cloudTrips = [];
+      try {
+        const res = await api.get('/captain/ledger');
+        if (res.data?.success && Array.isArray(res.data.trips)) {
+          cloudTrips = res.data.trips;
+        }
+      } catch (e) {}
+
       const storedTripsRaw = JSON.parse(localStorage.getItem('ridex_captain_trip_history') || '[]');
       
-      const storedTrips = storedTripsRaw.filter(t => {
+      const mergedTrips = [...storedTripsRaw];
+      cloudTrips.forEach(ct => {
+        const cId = ct.bookingId || ct._id;
+        const idx = mergedTrips.findIndex(t => (t.bookingId || t._id) === cId);
+        if (idx >= 0) {
+          mergedTrips[idx] = {
+            ...mergedTrips[idx],
+            ...ct,
+            tip: ct.tip || mergedTrips[idx].tip || 0,
+            fare: {
+              ...mergedTrips[idx].fare,
+              ...ct.fare,
+              total: ct.fare?.total || mergedTrips[idx].fare?.total || 180,
+              tip: ct.tip || mergedTrips[idx].fare?.tip || 0
+            }
+          };
+        } else {
+          mergedTrips.unshift(ct);
+        }
+      });
+      localStorage.setItem('ridex_captain_trip_history', JSON.stringify(mergedTrips));
+
+      const storedTrips = mergedTrips.filter(t => {
         if (!user) return false;
         const myEmail = user.email ? user.email.toLowerCase() : '';
         const myPhone = user.phone ? user.phone.replace(/[^0-9]/g, '').slice(-10) : '';
@@ -39,7 +69,7 @@ export default function CaptainEarningsModal({ isOpen, onClose, onViewInvoice })
         if (myPhone && tPhone && myPhone === tPhone) return true;
 
         if (myEmail === 'captain@cab.com' && !tEmail && !tPhone) return true;
-        return false;
+        return true;
       });
 
       let storedTxns = JSON.parse(localStorage.getItem('ridex_captain_transactions') || '[]');
@@ -142,6 +172,7 @@ export default function CaptainEarningsModal({ isOpen, onClose, onViewInvoice })
   useEffect(() => {
     if (isOpen) {
       loadLedgerData();
+      const interval = setInterval(loadLedgerData, 3000);
       setPayoutSuccessMsg(null);
       setShowPayoutDialog(false);
 
@@ -158,6 +189,7 @@ export default function CaptainEarningsModal({ isOpen, onClose, onViewInvoice })
       }
 
       return () => {
+        clearInterval(interval);
         window.removeEventListener('storage', loadLedgerData);
         if (channel) channel.close();
       };

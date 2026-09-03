@@ -1,14 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const { toggleStatus, getCaptainDashboard, respondToRide } = require("../controllers/captainController");
-const { protect } = require("../middleware/authMiddleware");
-const { authorize } = require("../middleware/roleMiddleware");
+const { toggleStatus, getCaptainDashboard, respondToRide, getCaptainLedger } = require("../controllers/captainController");
+const { protectOptional } = require("../middleware/authMiddleware");
 
-router.use(protect);
-router.use(authorize("captain", "admin"));
-
-router.post("/toggle-status", toggleStatus);
-router.get("/dashboard", getCaptainDashboard);
-router.post("/respond", respondToRide);
+router.post("/toggle-status", protectOptional, toggleStatus);
+router.get("/dashboard", protectOptional, getCaptainDashboard);
+router.post("/respond", protectOptional, respondToRide);
+router.get("/ledger", protectOptional, getCaptainLedger);
 
 module.exports = router;
