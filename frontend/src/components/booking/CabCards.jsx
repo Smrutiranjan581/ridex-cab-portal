@@ -1,7 +1,13 @@
 import React from 'react';
-import { Users, Check, Sparkles } from 'lucide-react';
+import { Users, Check, Sparkles, Ticket, Zap } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { getRiderRideCount, getRiderWelcomeDiscount } from '../../utils/riderDiscount';
 
 export default function CabCards({ selectedType, onSelectType, estimates, distanceKm, durationMins, hasRoute }) {
+  const { user } = useAuth();
+  const rideCount = getRiderRideCount(user);
+  const discountInfo = getRiderWelcomeDiscount(rideCount);
+
   const cabs = [
     {
       id: 'bike',
@@ -68,32 +74,42 @@ export default function CabCards({ selectedType, onSelectType, estimates, distan
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-between items-center px-1">
+      {/* Top Banner with Route & Active Discount Pill */}
+      <div className="flex flex-wrap justify-between items-center gap-2 px-1">
         <h3 className="text-xs sm:text-sm font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           Select Vehicle Category
         </h3>
-        {hasRoute ? (
-          <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full">
-            {distanceKm} KM • ~{durationMins} Mins
-          </span>
-        ) : (
-          <span className="text-[11px] font-semibold text-slate-400">
-            Enter pickup & drop to calculate fare
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {discountInfo.isEligible && (
+            <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-1 rounded-full flex items-center gap-1 shadow-xs">
+              <Sparkles className="w-3 h-3" />
+              {discountInfo.badgeText}
+            </span>
+          )}
+          {hasRoute ? (
+            <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full">
+              {distanceKm} KM • ~{durationMins} Mins
+            </span>
+          ) : (
+            <span className="text-[11px] font-semibold text-slate-400">
+              Enter pickup & drop to calculate fare
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-2.5">
         {cabs.map((cab) => {
           const isSelected = selectedType === cab.id;
           const fareData = estimates?.[cab.id];
-          const calculatedFare = fareData ? fareData.total : Math.round(cab.baseRate + distanceKm * cab.perKm);
-          const displayFare = hasRoute ? `₹${calculatedFare}` : `From ₹${cab.baseRate}`;
+          const rawFare = fareData ? fareData.total : Math.round(cab.baseRate + distanceKm * cab.perKm);
+          const discountAmt = discountInfo.isEligible ? Math.round(rawFare * (discountInfo.discountPercent / 100)) : 0;
+          const finalFare = Math.max(15, rawFare - discountAmt);
 
           return (
             <div
               key={cab.id}
-              onClick={() => onSelectType(cab.id)}
+              onClick={() => onSelectType(cab.id, { total: finalFare, rawFare, discountAmt, discountPercent: discountInfo.discountPercent })}
               className={`cursor-pointer rounded-2xl p-3.5 border transition-all duration-150 flex items-center justify-between ${
                 isSelected
                   ? 'bg-amber-500/10 dark:bg-amber-500/15 border-amber-500 shadow-md ring-1 ring-amber-500'
@@ -123,8 +139,31 @@ export default function CabCards({ selectedType, onSelectType, estimates, distan
               </div>
 
               <div className="text-right pl-3">
-                <p className="text-lg font-black text-slate-900 dark:text-white">{displayFare}</p>
-                <p className="text-[10px] text-slate-400">{hasRoute ? "Taxes included" : "Base rate"}</p>
+                {hasRoute ? (
+                  <div>
+                    <div className="flex items-baseline justify-end gap-1.5">
+                      <p className="text-lg font-black text-slate-900 dark:text-white font-mono">₹{finalFare}</p>
+                      {discountAmt > 0 && (
+                        <span className="text-xs font-bold text-slate-400 line-through font-mono">
+                          ₹{rawFare}
+                        </span>
+                      )}
+                    </div>
+                    {discountAmt > 0 ? (
+                      <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                        Saved ₹{discountAmt} ({discountInfo.discountPercent}% OFF)
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-slate-400">Taxes included</p>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-lg font-black text-slate-900 dark:text-white">From ₹{cab.baseRate}</p>
+                    <p className="text-[10px] text-slate-400">Base rate</p>
+                  </div>
+                )}
+
                 {isSelected && (
                   <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 mt-1">
                     <Check className="w-3.5 h-3.5" /> Selected

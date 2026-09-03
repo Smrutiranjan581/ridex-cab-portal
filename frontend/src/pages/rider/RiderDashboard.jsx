@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Car, Clock, CheckCircle2, Wallet, Plus, Navigation, ArrowRight, ShieldCheck, MapPin, Search, Star, Plane, Building2, Sparkles } from 'lucide-react';
+import { Car, Clock, CheckCircle2, Wallet, Plus, Navigation, ArrowRight, ShieldCheck, MapPin, Search, Star, Plane, Building2, Sparkles, Ticket, Zap } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import Navbar from '../../components/common/Navbar';
 import Sidebar from '../../components/common/Sidebar';
@@ -9,6 +9,8 @@ import BookingsTable from '../../components/dashboard/BookingsTable';
 import InvoiceModal from '../../components/booking/InvoiceModal';
 import RatingModal from '../../components/booking/RatingModal';
 import LiveMap from '../../components/booking/LiveMap';
+import RiderWelcomeOfferModal from '../../components/rider/RiderWelcomeOfferModal';
+import { getRiderRideCount, getRiderWelcomeDiscount } from '../../utils/riderDiscount';
 import api from '../../services/api';
 
 export default function RiderDashboard() {
@@ -18,6 +20,25 @@ export default function RiderDashboard() {
   const [selectedReview, setSelectedReview] = useState(null);
   const [quickDestination, setQuickDestination] = useState('');
   const navigate = useNavigate();
+
+  const rideCount = getRiderRideCount(user);
+  const discountInfo = getRiderWelcomeDiscount(rideCount);
+
+  const [showOfferModal, setShowOfferModal] = useState(() => {
+    try {
+      const seen = sessionStorage.getItem('ridex_offer_modal_seen');
+      return rideCount < 2 && !seen;
+    } catch (e) {
+      return rideCount < 2;
+    }
+  });
+
+  const handleCloseOfferModal = () => {
+    try {
+      sessionStorage.setItem('ridex_offer_modal_seen', 'true');
+    } catch (e) {}
+    setShowOfferModal(false);
+  };
 
   useEffect(() => {
     const fetchRides = async () => {
@@ -87,6 +108,43 @@ export default function RiderDashboard() {
               </div>
             </div>
           </div>
+
+          {/* Active Welcome Discount Callout Banner */}
+          {discountInfo.isEligible && (
+            <div 
+              onClick={() => setShowOfferModal(true)}
+              className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-emerald-500/10 border-2 border-amber-500/40 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 cursor-pointer hover:border-amber-500 transition-all group"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500 text-slate-950 font-bold text-2xl flex items-center justify-center shrink-0 shadow-md group-hover:scale-110 transition-transform">
+                  🎁
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-500 text-slate-950">
+                      Active Offer
+                    </span>
+                    <span className="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">
+                      Code: {discountInfo.code}
+                    </span>
+                  </div>
+                  <h3 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white mt-0.5">
+                    {discountInfo.title} Applied Automatically!
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    {rideCount === 0 ? "Get 30% OFF on your 1st ride + 20% OFF on your 2nd ride." : "Enjoy 20% OFF on this 2nd ride."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                <span className="text-xs font-bold text-amber-600 dark:text-amber-400 group-hover:underline">
+                  View Reward Details
+                </span>
+                <ArrowRight className="w-4 h-4 text-amber-500 group-hover:translate-x-1 transition-transform" />
+              </div>
+            </div>
+          )}
 
           {/* Active Trip Banner if ongoing */}
           {activeRide && (
@@ -266,6 +324,13 @@ export default function RiderDashboard() {
           onClose={() => setSelectedReview(null)}
         />
       )}
+
+      {/* Rider Welcome Offer Pop-up (30% off 1st ride, 20% off 2nd ride) */}
+      <RiderWelcomeOfferModal
+        isOpen={showOfferModal}
+        onClose={handleCloseOfferModal}
+        completedRidesCount={rideCount}
+      />
     </div>
   );
 }

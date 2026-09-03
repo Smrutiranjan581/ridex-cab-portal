@@ -132,8 +132,11 @@ export default function BookingForm({ onConfirmBooking, isSubmitting, onRouteCha
     notifyRouteSync(pickup, landmark.label, pickupCoords, landmark.coords, vehicleType);
   };
 
-  const handleVehicleSelect = (type) => {
+  const [selectedFareData, setSelectedFareData] = useState(null);
+
+  const handleVehicleSelect = (type, fareObj) => {
     setVehicleType(type);
+    if (fareObj) setSelectedFareData(fareObj);
     notifyRouteSync(pickup, drop, pickupCoords, dropCoords, type);
   };
 
@@ -182,6 +185,7 @@ export default function BookingForm({ onConfirmBooking, isSubmitting, onRouteCha
       specialInstructions,
       distanceKm: finalKm,
       estimatedDurationMins: finalMins,
+      fare: selectedFareData || { total: Math.round(finalKm * 18 + 90) },
       paymentMethod
     });
   };
