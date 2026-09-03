@@ -31,16 +31,32 @@ exports.getCaptainDashboard = async (req, res) => {
     let tripHistory = [];
 
     try {
-      profile = await CaptainProfile.findOne({ user: req.user._id });
-      activeTrip = await Booking.findOne({
-        captain: req.user._id,
-        status: { $in: ["captain_assigned", "captain_arriving", "trip_started"] }
-      }).populate("rider", "name phone avatar company");
+      if (req.user?._id) {
+        profile = await CaptainProfile.findOne({ user: req.user._id });
+      }
+      if (!profile && req.user?.email) {
+        const User = require("../models/User");
+        const u = await User.findOne({ email: req.user.email.toLowerCase() });
+        if (u) profile = await CaptainProfile.findOne({ user: u._id });
+      }
+      if (!profile && req.user?.phone) {
+        const User = require("../models/User");
+        const cleanPhoneDigits = req.user.phone.replace(/[^0-9]/g, "").slice(-10);
+        const u = await User.findOne({ phone: { $regex: cleanPhoneDigits } });
+        if (u) profile = await CaptainProfile.findOne({ user: u._id });
+      }
 
-      tripHistory = await Booking.find({
-        captain: req.user._id,
-        status: "trip_completed"
-      }).sort({ createdAt: -1 }).limit(10);
+      if (req.user?._id) {
+        activeTrip = await Booking.findOne({
+          captain: req.user._id,
+          status: { $in: ["captain_assigned", "captain_arriving", "trip_started"] }
+        }).populate("rider", "name phone avatar company");
+
+        tripHistory = await Booking.find({
+          captain: req.user._id,
+          status: "trip_completed"
+        }).sort({ createdAt: -1 }).limit(10);
+      }
     } catch (e) {}
 
     res.json({

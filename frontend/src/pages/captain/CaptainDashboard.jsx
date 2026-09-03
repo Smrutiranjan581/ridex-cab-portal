@@ -10,8 +10,101 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 
 export default function CaptainDashboard() {
-  const { user } = useAuth();
+  const { user, captainProfile } = useAuth();
   const isDeactivated = user?.isDeactivated || user?.status === 'deactivated';
+
+  const resolveVehicleDetails = () => {
+    if (captainProfile?.vehicle?.numberPlate) {
+      return {
+        model: captainProfile.vehicle.model || "RideX Verified Vehicle",
+        numberPlate: captainProfile.vehicle.numberPlate,
+        category: captainProfile.vehicle.category || "sedan"
+      };
+    }
+
+    if (user?.captainProfile?.vehicle?.numberPlate) {
+      return {
+        model: user.captainProfile.vehicle.model || "RideX Verified Vehicle",
+        numberPlate: user.captainProfile.vehicle.numberPlate,
+        category: user.captainProfile.vehicle.category || "sedan"
+      };
+    }
+
+    if (user?.vehicleDetails?.numberPlate) {
+      return {
+        model: user.vehicleDetails.model || "RideX Verified Vehicle",
+        numberPlate: user.vehicleDetails.numberPlate,
+        category: user.vehicleDetails.category || "sedan"
+      };
+    }
+
+    if (user?.vehicle?.numberPlate) {
+      return {
+        model: user.vehicle.model || "RideX Verified Vehicle",
+        numberPlate: user.vehicle.numberPlate,
+        category: user.vehicle.category || "sedan"
+      };
+    }
+
+    try {
+      const storedUsers = JSON.parse(localStorage.getItem('fleetcorp_registered_users') || '[]');
+      const myUser = storedUsers.find(
+        u => (user?.email && u.email?.toLowerCase() === user.email.toLowerCase()) ||
+             (user?.phone && u.phone && u.phone.replace(/[^0-9]/g, '').slice(-10) === user.phone.replace(/[^0-9]/g, '').slice(-10))
+      );
+      if (myUser) {
+        const v = myUser.vehicleDetails || myUser.captainProfile?.vehicle || myUser.vehicle;
+        if (v?.numberPlate) {
+          return {
+            model: v.model || "RideX Verified Vehicle",
+            numberPlate: v.numberPlate,
+            category: v.category || "sedan"
+          };
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const capSaved = localStorage.getItem('fleetcorp_captain');
+      if (capSaved) {
+        const parsed = JSON.parse(capSaved);
+        if (parsed?.vehicle?.numberPlate) {
+          return {
+            model: parsed.vehicle.model || "RideX Verified Vehicle",
+            numberPlate: parsed.vehicle.numberPlate,
+            category: parsed.vehicle.category || "sedan"
+          };
+        }
+      }
+    } catch (e) {}
+
+    return {
+      model: "RideX Verified Vehicle",
+      numberPlate: "OD-02-AB-1234",
+      category: "sedan"
+    };
+  };
+
+  const [liveVehicle, setLiveVehicle] = useState(resolveVehicleDetails);
+
+  useEffect(() => {
+    setLiveVehicle(resolveVehicleDetails());
+
+    const fetchCaptainProfileFromCloud = async () => {
+      try {
+        const res = await api.get('/captain/dashboard');
+        if (res.data?.success && res.data.profile?.vehicle?.numberPlate) {
+          setLiveVehicle({
+            model: res.data.profile.vehicle.model || "RideX Verified Vehicle",
+            numberPlate: res.data.profile.vehicle.numberPlate,
+            category: res.data.profile.vehicle.category || "sedan"
+          });
+        }
+      } catch (e) {}
+    };
+
+    fetchCaptainProfileFromCloud();
+  }, [user, captainProfile]);
   
   const getInitialOnlineState = () => {
     if (isDeactivated) return false;
@@ -472,9 +565,9 @@ export default function CaptainDashboard() {
         trips: (user?.totalTrips || 12) + stats.totalTrips
       },
       vehicle: {
-        category: user?.vehicleDetails?.category || incomingRequest.vehicleType || "sedan",
-        model: user?.vehicleDetails?.model || "RideX Verified Vehicle",
-        numberPlate: user?.vehicleDetails?.numberPlate || "OD-02-AB-1234"
+        category: liveVehicle.category,
+        model: liveVehicle.model,
+        numberPlate: liveVehicle.numberPlate
       }
     };
 
@@ -615,11 +708,11 @@ export default function CaptainDashboard() {
                   Captain {user?.name || "Partner"}
                 </h1>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  {user?.vehicleDetails?.model || "RideX Verified Vehicle"} •{" "}
-                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                    {user?.vehicleDetails?.numberPlate || "OD-02-AB-1234"}
+                  {liveVehicle.model} •{" "}
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200 uppercase bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                    {liveVehicle.numberPlate}
                   </span>{" "}
-                  • <span className="capitalize">{user?.vehicleDetails?.category || "RideX Fleet"}</span>
+                  • <span className="capitalize font-semibold text-amber-600 dark:text-amber-400">{liveVehicle.category}</span>
                 </p>
               </div>
             </div>
