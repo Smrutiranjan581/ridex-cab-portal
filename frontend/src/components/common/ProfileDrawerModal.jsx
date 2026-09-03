@@ -169,16 +169,96 @@ export default function ProfileDrawerModal({ onClose }) {
   const [walletBalance, setWalletBalance] = useState(0);
   const [addMoneyAmount, setAddMoneyAmount] = useState("50");
   const [addMoneySuccess, setAddMoneySuccess] = useState(false);
-  const [passbookList, setPassbookList] = useState([
-    { id: 1, type: "Debit", mode: "cash", date: "24 Jun 25, 03:02 pm", amount: "- ₹89.00" },
-    { id: 2, type: "Debit", mode: "cash", date: "24 Apr 25, 12:56 pm", amount: "- ₹134.00" },
-    { id: 3, type: "Debit", mode: "cash", date: "24 Apr 25, 09:02 am", amount: "- ₹104.00" },
-    { id: 4, type: "Debit", mode: "cash", date: "22 Apr 25, 01:52 pm", amount: "- ₹57.00" },
-    { id: 5, type: "Debit", mode: "cash", date: "3 Nov 24, 02:24 pm", amount: "- ₹95.00" },
-    { id: 6, type: "Debit", mode: "cash", date: "20 Oct 24, 12:49 pm", amount: "- ₹106.00" },
-    { id: 7, type: "Debit", mode: "cash", date: "6 Jun 24, 11:43 am", amount: "- ₹118.00" },
-    { id: 8, type: "Debit", mode: "cash", date: "20 May 24, 11:42 am", amount: "- ₹100.00" },
-  ]);
+
+  // Dynamic Real Wallet Passbook List Loader
+  const loadRealPassbookList = () => {
+    try {
+      const realItems = [];
+      const userKey = (user?.email || user?.phone || 'user').toLowerCase();
+      const myEmail = (user?.email || '').toLowerCase();
+      const myPhone = (user?.phone || '').replace(/[^0-9]/g, '').slice(-10);
+
+      // 1. Load manual wallet recharges / top-ups from local storage
+      const rechargesRaw = localStorage.getItem(`ridex_wallet_recharges_${userKey}`);
+      if (rechargesRaw) {
+        const recharges = JSON.parse(rechargesRaw);
+        realItems.push(...recharges);
+      }
+
+      // 2. If Captain: Load real trip fare credits, passenger tips, and bank withdrawals
+      if (user?.role === 'captain') {
+        const txnsRaw = localStorage.getItem('ridex_captain_transactions');
+        if (txnsRaw) {
+          const txns = JSON.parse(txnsRaw);
+          const myTxns = txns.filter(t => {
+            if (!t.date) return false;
+            const tEmail = (t.captainEmail || '').toLowerCase();
+            const tPhone = (t.captainPhone || '').replace(/[^0-9]/g, '').slice(-10);
+            if (myEmail && tEmail && myEmail === tEmail) return true;
+            if (myPhone && tPhone && myPhone === tPhone) return true;
+            if (myEmail === 'captain@cab.com' && !tEmail && !tPhone) return true;
+            return true;
+          });
+
+          myTxns.forEach(t => {
+            const dateObj = new Date(t.date);
+            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const formattedDate = isNaN(dateObj.getTime())
+              ? "Recent"
+              : `${dateObj.getDate()} ${months[dateObj.getMonth()]} ${dateObj.getFullYear().toString().slice(-2)}, ${dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+            realItems.push({
+              id: t.id || 'TXN-' + Math.random(),
+              type: t.type === 'CREDIT' ? 'Credit' : 'Debit',
+              mode: t.title || t.subtitle || (t.type === 'CREDIT' ? 'Ride Fare Credited' : 'Bank Transfer'),
+              date: formattedDate,
+              amount: `${t.type === 'CREDIT' ? '+' : '-'} ₹${Number(t.amount || 0).toFixed(2)}`,
+              timestamp: isNaN(dateObj.getTime()) ? Date.now() : dateObj.getTime()
+            });
+          });
+        }
+      }
+
+      // 3. If Rider: Load real completed ride payments
+      if (user?.role === 'rider') {
+        const tripsRaw = localStorage.getItem('ridex_captain_trip_history') || localStorage.getItem('ridex_rider_booking_history');
+        if (tripsRaw) {
+          const trips = JSON.parse(tripsRaw);
+          trips.forEach(trip => {
+            const dateObj = new Date(trip.createdAt || trip.date || Date.now());
+            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const formattedDate = isNaN(dateObj.getTime())
+              ? "Recent"
+              : `${dateObj.getDate()} ${months[dateObj.getMonth()]} ${dateObj.getFullYear().toString().slice(-2)}, ${dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+            const fareAmt = trip.fare?.total || trip.fare || 0;
+            if (fareAmt > 0) {
+              realItems.push({
+                id: 'RIDE-' + (trip.bookingId || trip._id || Math.random()),
+                type: 'Debit',
+                mode: `${trip.vehicleType || trip.category || 'RideX'} Commute • ${trip.drop ? (typeof trip.drop === 'string' ? trip.drop.slice(0, 24) : trip.drop.address?.slice(0, 24)) : 'Completed Ride'}`,
+                date: formattedDate,
+                amount: `- ₹${Number(fareAmt).toFixed(2)}`,
+                timestamp: isNaN(dateObj.getTime()) ? Date.now() : dateObj.getTime()
+              });
+            }
+          });
+        }
+      }
+
+      // Sort newest first by timestamp
+      realItems.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      return realItems;
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const [passbookList, setPassbookList] = useState(loadRealPassbookList);
+
+  useEffect(() => {
+    setPassbookList(loadRealPassbookList());
+  }, [user, activeSubModal]);
 
   // Delete Account modal state & Pro-level Popup state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -639,16 +719,23 @@ export default function ProfileDrawerModal({ onClose }) {
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const dateStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear().toString().slice(-2)}, ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
       
-      setPassbookList(prev => [
-        {
-          id: Date.now(),
-          type: "Credit",
-          mode: "RideX Wallet Recharge",
-          date: dateStr,
-          amount: `+ ₹${num.toFixed(2)}`
-        },
-        ...prev
-      ]);
+      const newEntry = {
+        id: 'TOPUP-' + Date.now(),
+        type: "Credit",
+        mode: "RideX Wallet Recharge",
+        date: dateStr,
+        amount: `+ ₹${num.toFixed(2)}`,
+        timestamp: Date.now()
+      };
+
+      try {
+        const userKey = (user?.email || user?.phone || 'user').toLowerCase();
+        const existingRecharges = JSON.parse(localStorage.getItem(`ridex_wallet_recharges_${userKey}`) || '[]');
+        existingRecharges.unshift(newEntry);
+        localStorage.setItem(`ridex_wallet_recharges_${userKey}`, JSON.stringify(existingRecharges));
+      } catch (e) {}
+
+      setPassbookList(prev => [newEntry, ...prev]);
 
       setAddMoneySuccess(true);
       setTimeout(() => {
@@ -2136,40 +2223,56 @@ export default function ProfileDrawerModal({ onClose }) {
                     </button>
                   </div>
 
-                  {/* Transaction List matching user screenshot */}
+                  {/* Real Transaction List (No mock/demo transactions) */}
                   <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80">
-                    {passbookList.map((tx) => (
-                      <div key={tx.id} className="py-3.5 flex items-start justify-between group hover:bg-slate-50 dark:hover:bg-slate-800/40 px-1 rounded-xl transition-colors">
-                        <div className="flex items-start gap-3.5">
-                          {/* Circle with Minus or Plus */}
-                          {tx.type === "Credit" ? (
-                            <div className="w-5 h-5 rounded-full border-2 border-emerald-500/80 flex items-center justify-center text-emerald-500 mt-0.5 shrink-0 text-xs font-bold">
-                              +
+                    {passbookList.length > 0 ? (
+                      passbookList.map((tx) => (
+                        <div key={tx.id} className="py-3.5 flex items-start justify-between group hover:bg-slate-50 dark:hover:bg-slate-800/40 px-1 rounded-xl transition-colors">
+                          <div className="flex items-start gap-3.5">
+                            {/* Circle with Minus or Plus */}
+                            {tx.type === "Credit" ? (
+                              <div className="w-5 h-5 rounded-full border-2 border-emerald-500/80 flex items-center justify-center text-emerald-500 mt-0.5 shrink-0 text-xs font-bold">
+                                +
+                              </div>
+                            ) : (
+                              <div className="w-5 h-5 rounded-full border-2 border-rose-500/80 flex items-center justify-center text-rose-500 mt-0.5 shrink-0">
+                                <div className="w-2.5 h-[2px] bg-rose-500 rounded-full" />
+                              </div>
+                            )}
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-tight">
+                                {tx.type}
+                              </h4>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                {tx.mode}
+                              </p>
+                              <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                                {tx.date}
+                              </p>
                             </div>
-                          ) : (
-                            <div className="w-5 h-5 rounded-full border-2 border-rose-500/80 flex items-center justify-center text-rose-500 mt-0.5 shrink-0">
-                              <div className="w-2.5 h-[2px] bg-rose-500 rounded-full" />
-                            </div>
-                          )}
-                          <div>
-                            <h4 className="font-bold text-sm text-slate-900 dark:text-white leading-tight">
-                              {tx.type}
-                            </h4>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium lowercase">
-                              {tx.mode}
-                            </p>
-                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                              {tx.date}
-                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-sm font-bold font-mono ${tx.type === "Credit" ? "text-emerald-500" : "text-slate-900 dark:text-white"}`}>
+                              {tx.amount}
+                            </span>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <span className={`text-sm font-bold font-mono ${tx.type === "Credit" ? "text-emerald-500" : "text-slate-900 dark:text-white"}`}>
-                            {tx.amount}
-                          </span>
+                      ))
+                    ) : (
+                      <div className="py-14 px-4 text-center space-y-3.5">
+                        <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800/80 text-slate-400 flex items-center justify-center mx-auto text-3xl shadow-inner">
+                          💳
+                        </div>
+                        <div className="space-y-1">
+                          <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                            No Passbook Transactions Yet
+                          </h4>
+                          <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+                            Your real ride fare payments, wallet recharges, and payout transfers will automatically be recorded here.
+                          </p>
                         </div>
                       </div>
-                    ))}
+                    )}
                   </div>
 
                 </div>
