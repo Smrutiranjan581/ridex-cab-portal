@@ -37,24 +37,41 @@ function AppContent() {
     initMobileDeviceExperience(appTarget);
   }, [appTarget]);
 
-  // Determine App Root Destination based on App Target
+  // Determine App Root Destination based on Authentication & App Target
   const getRootElement = () => {
-    if (appTarget === 'captain') {
-      if (isAuthenticated && user?.role === 'captain') {
+    // 1. If user is logged in, strictly open their dedicated app dashboard
+    if (isAuthenticated && user) {
+      if (user.role === 'admin') {
+        return <Navigate to="/admin" replace />;
+      }
+      if (user.role === 'captain') {
         return <Navigate to="/captain" replace />;
       }
+      if (user.role === 'rider') {
+        return <Navigate to="/rider/book" replace />;
+      }
+    }
+
+    // 2. Dedicated mobile builds for Rider / Captain
+    if (appTarget === 'captain') {
       return <Navigate to="/login" replace />;
     }
 
     if (appTarget === 'rider') {
-      if (isAuthenticated && user?.role === 'rider') {
-        return <Navigate to="/rider/book" replace />;
-      }
       return <Navigate to="/login" replace />;
     }
 
-    // Default Web Portal Root
+    // 3. Default Web Portal Root for Guests
     return <LandingPage />;
+  };
+
+  const getAuthRedirect = (element) => {
+    if (isAuthenticated && user) {
+      if (user.role === 'admin') return <Navigate to="/admin" replace />;
+      if (user.role === 'captain') return <Navigate to="/captain" replace />;
+      return <Navigate to="/rider/book" replace />;
+    }
+    return element;
   };
 
   return (
@@ -62,8 +79,8 @@ function AppContent() {
       <Routes>
         {/* Root Route */}
         <Route path="/" element={getRootElement()} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/login" element={getAuthRedirect(<LoginPage />)} />
+        <Route path="/register" element={getAuthRedirect(<RegisterPage />)} />
 
         {/* Rider Protected Routes */}
         <Route element={<ProtectedRoute allowedRoles={['rider']} />}>

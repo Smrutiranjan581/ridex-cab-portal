@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Car, Menu, X, LogOut, ShieldCheck, Smartphone, Download } from 'lucide-react';
+import { Car, Menu, X, LogOut, ShieldCheck, Smartphone, Download, UserCheck, Clock } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from './ThemeToggle';
 import Notifications from './Notifications';
@@ -55,6 +55,10 @@ export default function Navbar() {
           onClick={() => {
             if (user?.role === 'admin') {
               navigate('/admin');
+            } else if (user?.role === 'captain') {
+              navigate('/captain');
+            } else if (user?.role === 'rider') {
+              navigate('/rider/book');
             } else {
               scrollToTop();
             }
@@ -64,15 +68,65 @@ export default function Navbar() {
           <RideXLogo 
             size="md" 
             adminBadge={user?.role === 'admin'} 
-            subtitle={user?.role === 'admin' ? 'Super Admin Portal' : 'Smart City Commute'} 
+            subtitle={
+              user?.role === 'admin' 
+                ? 'Super Admin Portal' 
+                : user?.role === 'captain' 
+                  ? 'Captain Driver App' 
+                  : user?.role === 'rider' 
+                    ? 'Rider App • Booking' 
+                    : 'Smart City Commute'
+            } 
           />
         </button>
 
-        {/* Desktop Navigation Links (Admin sees dedicated console badge instead of public marketing links) */}
+        {/* Desktop Navigation Links */}
         {user?.role === 'admin' ? (
           <div className="hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/25 text-purple-700 dark:text-purple-300 font-extrabold text-xs">
             <ShieldCheck className="w-4 h-4 text-purple-500" /> Executive Fleet Command Console
           </div>
+        ) : user?.role === 'captain' ? (
+          <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-600 dark:text-slate-300">
+            <Link
+              to="/captain"
+              className={`hover:text-amber-500 transition-colors flex items-center gap-1.5 ${
+                location.pathname === '/captain' || location.pathname === '/captain/' ? 'text-amber-500 font-bold' : ''
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 text-amber-500" />
+              <span>Duty Radar</span>
+            </Link>
+            <Link
+              to="/captain/trips"
+              className={`hover:text-amber-500 transition-colors flex items-center gap-1.5 ${
+                location.pathname.includes('/captain/trips') ? 'text-amber-500 font-bold' : ''
+              }`}
+            >
+              <Clock className="w-4 h-4 text-slate-400" />
+              <span>Trip History</span>
+            </Link>
+          </nav>
+        ) : user?.role === 'rider' ? (
+          <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-600 dark:text-slate-300">
+            <Link
+              to="/rider/book"
+              className={`hover:text-amber-500 transition-colors flex items-center gap-1.5 ${
+                location.pathname.includes('/rider/book') ? 'text-amber-500 font-bold' : ''
+              }`}
+            >
+              <Car className="w-4 h-4 text-amber-500" />
+              <span>Book Ride</span>
+            </Link>
+            <Link
+              to="/rider/my-rides"
+              className={`hover:text-amber-500 transition-colors flex items-center gap-1.5 ${
+                location.pathname.includes('/rider/my-rides') ? 'text-amber-500 font-bold' : ''
+              }`}
+            >
+              <Clock className="w-4 h-4 text-slate-400" />
+              <span>My Rides</span>
+            </Link>
+          </nav>
         ) : (
           <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-600 dark:text-slate-300">
             <button
@@ -82,23 +136,19 @@ export default function Navbar() {
               Home
             </button>
             
-            {user?.role !== 'captain' && (
-              <button
-                onClick={() => scrollToSection('services')}
-                className="hover:text-amber-500 transition-colors"
-              >
-                Services
-              </button>
-            )}
+            <button
+              onClick={() => scrollToSection('services')}
+              className="hover:text-amber-500 transition-colors"
+            >
+              Services
+            </button>
             
-            {user?.role !== 'captain' && (
-              <button
-                onClick={() => scrollToSection('fleet')}
-                className="hover:text-amber-500 transition-colors"
-              >
-                Our Fleet
-              </button>
-            )}
+            <button
+              onClick={() => scrollToSection('fleet')}
+              className="hover:text-amber-500 transition-colors"
+            >
+              Our Fleet
+            </button>
             
             <button
               onClick={() => scrollToSection('how-it-works')}
@@ -125,7 +175,7 @@ export default function Navbar() {
 
           {isAuthenticated ? (
             <div className="flex items-center gap-3">
-              {/* Profile button shown only for Riders and Captains, hidden for Admin */}
+              {/* Profile button shown for Riders and Captains */}
               {user?.role !== 'admin' && (
                 <button
                   onClick={() => setShowProfileDrawer(true)}
@@ -142,7 +192,7 @@ export default function Navbar() {
                 </button>
               )}
 
-              {/* Logout button shown only for Admin in Navbar */}
+              {/* Logout button shown for Admin in Navbar */}
               {user?.role === 'admin' && (
                 <button
                   onClick={() => { logout(); navigate('/'); }}
@@ -193,50 +243,80 @@ export default function Navbar() {
             <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500 text-slate-950">Free</span>
           </button>
 
-          <button
-            onClick={scrollToTop}
-            className="w-full text-left block px-3 py-2 rounded-lg text-base font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            Home
-          </button>
-          
-          {user?.role !== 'captain' && (
-            <button
-              onClick={() => scrollToSection('services')}
-              className="w-full text-left block px-3 py-2 rounded-lg text-base font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
-              Services
-            </button>
+          {user?.role === 'rider' ? (
+            <div className="space-y-1">
+              <Link
+                to="/rider/book"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full text-left flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-bold text-slate-900 dark:text-white hover:bg-amber-500/10"
+              >
+                <Car className="w-4 h-4 text-amber-500" /> Book Ride
+              </Link>
+              <Link
+                to="/rider/my-rides"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full text-left flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-bold text-slate-900 dark:text-white hover:bg-amber-500/10"
+              >
+                <Clock className="w-4 h-4 text-slate-400" /> My Rides History
+              </Link>
+            </div>
+          ) : user?.role === 'captain' ? (
+            <div className="space-y-1">
+              <Link
+                to="/captain"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full text-left flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-bold text-slate-900 dark:text-white hover:bg-amber-500/10"
+              >
+                <ShieldCheck className="w-4 h-4 text-amber-500" /> Captain Duty Radar
+              </Link>
+              <Link
+                to="/captain/trips"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full text-left flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-bold text-slate-900 dark:text-white hover:bg-amber-500/10"
+              >
+                <Clock className="w-4 h-4 text-slate-400" /> Trip History
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <button
+                onClick={scrollToTop}
+                className="w-full text-left block px-3 py-2 rounded-lg text-base font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Home
+              </button>
+              <button
+                onClick={() => scrollToSection('services')}
+                className="w-full text-left block px-3 py-2 rounded-lg text-base font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Services
+              </button>
+              <button
+                onClick={() => scrollToSection('fleet')}
+                className="w-full text-left block px-3 py-2 rounded-lg text-base font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                Our Fleet
+              </button>
+              <button
+                onClick={() => scrollToSection('how-it-works')}
+                className="w-full text-left block px-3 py-2 rounded-lg text-base font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                How It Works
+              </button>
+            </div>
           )}
-          
-          {user?.role !== 'captain' && (
-            <button
-              onClick={() => scrollToSection('fleet')}
-              className="w-full text-left block px-3 py-2 rounded-lg text-base font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
-              Our Fleet
-            </button>
-          )}
-          
-          <button
-            onClick={() => scrollToSection('how-it-works')}
-            className="w-full text-left block px-3 py-2 rounded-lg text-base font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            How It Works
-          </button>
 
           {isAuthenticated ? (
             <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
-              <Link
-                to={getDashboardLink()}
-                onClick={() => setMobileMenuOpen(false)}
-                className="block px-3 py-2 rounded-lg text-base font-bold text-amber-500 bg-amber-50 dark:bg-amber-950/40 mb-2"
+              <button
+                onClick={() => { setShowProfileDrawer(true); setMobileMenuOpen(false); }}
+                className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 mb-2"
               >
-                Go to Dashboard ({user?.role})
-              </Link>
+                <UserCheck className="w-4 h-4" /> Open Profile & Settings
+              </button>
               <button
                 onClick={() => { logout(); setMobileMenuOpen(false); navigate('/'); }}
-                className="w-full text-left px-3 py-2 rounded-lg text-base font-semibold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30"
               >
                 Logout ({user?.name})
               </button>
@@ -261,9 +341,11 @@ export default function Navbar() {
           )}
         </div>
       )}
+
       {showProfileDrawer && (
         <ProfileDrawerModal onClose={() => setShowProfileDrawer(false)} />
       )}
+
       {/* Direct Mobile App Download Modal */}
       <DownloadAppModal
         isOpen={showDownloadModal}
