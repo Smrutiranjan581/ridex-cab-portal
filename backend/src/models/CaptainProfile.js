@@ -37,6 +37,7 @@ const captainProfileSchema = new mongoose.Schema(
       type: String,
       required: true,
       default: "DL-IND-2024-987654"
+    },
     status: {
       type: String,
       enum: ["available", "on_trip", "offline", "pending_approval", "rejected"],
