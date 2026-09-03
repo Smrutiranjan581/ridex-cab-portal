@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import Navbar from '../../components/common/Navbar';
 import Sidebar from '../../components/common/Sidebar';
+import api from '../../services/api';
 
 export default function CaptainPayments() {
   const [filterTab, setFilterTab] = useState('pending'); // 'pending' | 'completed' | 'rejected' | 'all'
@@ -16,28 +17,41 @@ export default function CaptainPayments() {
   const [rejectReason, setRejectReason] = useState('Bank account details mismatch.');
   const [toastNotice, setToastNotice] = useState(null);
 
-  // Load payout requests from localStorage
-  const loadPayouts = () => {
+  // Load payout requests from Cloud Backend API and localStorage
+  const loadPayouts = async () => {
+    let cloudPayouts = [];
+    try {
+      const res = await api.get('/payouts');
+      if (res.data?.success && Array.isArray(res.data.payouts)) {
+        cloudPayouts = res.data.payouts;
+      }
+    } catch (e) {}
+
     try {
       const stored = localStorage.getItem('ridex_payout_requests');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Filter out any dummy demo payout entries
-        const realPayouts = parsed.filter(p => p.id !== 'PAY-891024' && p.captainId !== 'cap_demo_1');
-        setPayouts(realPayouts);
-        if (realPayouts.length !== parsed.length) {
-          localStorage.setItem('ridex_payout_requests', JSON.stringify(realPayouts));
+      const localList = stored ? JSON.parse(stored) : [];
+      
+      const merged = [...localList];
+      cloudPayouts.forEach(cp => {
+        const idx = merged.findIndex(m => m.id === cp.id);
+        if (idx >= 0) {
+          merged[idx] = { ...merged[idx], ...cp };
+        } else {
+          merged.unshift(cp);
         }
-      } else {
-        setPayouts([]);
-      }
+      });
+
+      const realPayouts = merged.filter(p => p.id !== 'PAY-891024' && p.captainId !== 'cap_demo_1');
+      setPayouts(realPayouts);
+      localStorage.setItem('ridex_payout_requests', JSON.stringify(realPayouts));
     } catch (e) {
-      setPayouts([]);
+      if (cloudPayouts.length > 0) setPayouts(cloudPayouts);
     }
   };
 
   useEffect(() => {
     loadPayouts();
+    const interval = setInterval(loadPayouts, 5000);
 
     const handleStorageUpdate = (e) => {
       if (e.key === 'ridex_payout_requests') {
@@ -58,6 +72,7 @@ export default function CaptainPayments() {
     }
 
     return () => {
+      clearInterval(interval);
       window.removeEventListener('storage', handleStorageUpdate);
       if (channel) channel.close();
     };
@@ -75,7 +90,7 @@ export default function CaptainPayments() {
   };
 
   // Action: Approve & Transfer Payout
-  const handleApprovePayout = (payout) => {
+  const handleApprovePayout = async (payout) => {
     const utrNumber = 'UTR' + Math.floor(100000000000 + Math.random() * 900000000000);
     const approvedTimestamp = new Date().toISOString();
 
@@ -92,6 +107,11 @@ export default function CaptainPayments() {
     });
 
     savePayoutsList(updated);
+
+    // Call Cloud Backend API
+    try {
+      await api.put(`/payouts/${payout.id}/approve`);
+    } catch (e) {}
 
     // 1. Update captain's transaction record in ridex_captain_transactions
     try {
@@ -150,7 +170,7 @@ export default function CaptainPayments() {
   };
 
   // Action: Reject Payout & Refund Wallet
-  const handleConfirmReject = () => {
+  const handleConfirmReject = async () => {
     if (!rejectModalTarget) return;
 
     const updated = payouts.map(p => {
@@ -166,6 +186,11 @@ export default function CaptainPayments() {
     });
 
     savePayoutsList(updated);
+
+    // Call Cloud Backend API
+    try {
+      await api.put(`/payouts/${rejectModalTarget.id}/reject`, { reason: rejectReason });
+    } catch (e) {}
 
     // 1. Update Captain Ledger Transactions to mark Debit as REJECTED (restoring wallet balance)
     try {

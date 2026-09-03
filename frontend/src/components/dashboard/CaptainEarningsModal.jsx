@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 
 export default function CaptainEarningsModal({ isOpen, onClose, onViewInvoice }) {
   const { user } = useAuth();
@@ -232,6 +233,11 @@ export default function CaptainEarningsModal({ isOpen, onClose, onViewInvoice })
       status: 'PENDING_APPROVAL',
       category: 'bank_withdrawal'
     };
+
+    // Call Cloud Backend API so Admin on Laptop receives live payout request
+    try {
+      api.post('/payouts/request', newPayoutRequest).catch(() => {});
+    } catch (e) {}
 
     try {
       // 1. Save in ridex_payout_requests for Admin clearance

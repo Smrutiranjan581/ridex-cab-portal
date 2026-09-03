@@ -120,17 +120,17 @@ export default function Notifications() {
       }
       prevPendingCountRef.current = pendingCapsList.length;
 
-      // 2. Live Pending Payouts
+      // 2. Live Cloud Pending Payouts
+      let pendingPayoutsList = [];
       try {
-        const payoutsRaw = localStorage.getItem('ridex_payout_requests');
-        if (payoutsRaw) {
-          const payouts = JSON.parse(payoutsRaw);
-          const pendingPays = payouts.filter(p => p.status === 'pending_admin_approval' && p.id !== 'PAY-891024');
-          pendingPays.forEach(p => {
-            adminNotifs.push({
-              id: 'pay_' + p.id,
-              title: `💰 Payout Request: ₹${p.amount}`,
-              desc: `Captain ${p.captainName} requested 15-min bank withdrawal`,
+        const res = await api.get('/payouts');
+        if (res.data?.success && Array.isArray(res.data.payouts)) {
+          const apiPayouts = res.data.payouts.filter(p => p.status === 'pending_admin_approval');
+          apiPayouts.forEach(p => {
+            pendingPayoutsList.push({
+              id: 'pay_api_' + p.id,
+              title: `💰 Captain Payout: ₹${p.amount}`,
+              desc: `Captain ${p.captainName} requested ${p.payoutMethod === 'bank' ? 'Bank Transfer' : 'UPI Payout'} (${p.destination})`,
               time: 'Pending Review',
               icon: Landmark,
               color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20',
@@ -140,6 +140,32 @@ export default function Notifications() {
           });
         }
       } catch (e) {}
+
+      // Fallback local check
+      try {
+        const payoutsRaw = localStorage.getItem('ridex_payout_requests');
+        if (payoutsRaw) {
+          const payouts = JSON.parse(payoutsRaw);
+          const pendingPays = payouts.filter(p => p.status === 'pending_admin_approval' && p.id !== 'PAY-891024');
+          pendingPays.forEach(p => {
+            const exists = pendingPayoutsList.some(item => item.id.includes(p.id));
+            if (!exists) {
+              pendingPayoutsList.push({
+                id: 'pay_loc_' + p.id,
+                title: `💰 Captain Payout: ₹${p.amount}`,
+                desc: `Captain ${p.captainName} requested 15-min withdrawal`,
+                time: 'Pending Review',
+                icon: Landmark,
+                color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20',
+                link: '/admin/captain-payments',
+                isUrgent: true
+              });
+            }
+          });
+        }
+      } catch (e) {}
+
+      adminNotifs.push(...pendingPayoutsList);
 
       // 3. System Status
       adminNotifs.push({

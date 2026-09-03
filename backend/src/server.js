@@ -29,6 +29,7 @@ app.use("/api/bookings", require("./routes/bookingRoutes"));
 app.use("/api/captain", require("./routes/captainRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
 app.use("/api/reviews", require("./routes/reviewRoutes"));
+app.use("/api/payouts", require("./routes/payoutRoutes"));
 
 app.use(errorHandler);
 
