@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Car, Menu, X, LogOut, ShieldCheck } from 'lucide-react';
+import { Car, Menu, X, LogOut, ShieldCheck, Smartphone, Download } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from './ThemeToggle';
 import Notifications from './Notifications';
 import ProfileDrawerModal from './ProfileDrawerModal';
+import DownloadAppModal from './DownloadAppModal';
 import RideXLogo from './RideXLogo';
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showProfileDrawer, setShowProfileDrawer] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -108,7 +110,17 @@ export default function Navbar() {
         )}
 
         {/* Actions / CTA */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          {/* Direct Download Mobile App Button */}
+          <button
+            onClick={() => setShowDownloadModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20 hover:shadow-amber-500/30 transition-all hover:scale-105 cursor-pointer"
+            title="Download Android APKs"
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span>Get App</span>
+          </button>
+
           <ThemeToggle />
 
           {isAuthenticated ? (
@@ -171,6 +183,16 @@ export default function Navbar() {
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xl px-4 pt-4 pb-6 space-y-3">
+          <button
+            onClick={() => { setShowDownloadModal(true); setMobileMenuOpen(false); }}
+            className="w-full text-left flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-500/10 border border-amber-500/30 font-bold text-slate-900 dark:text-white"
+          >
+            <span className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-sm">
+              <Smartphone className="w-4 h-4" /> Download Mobile Apps (.apk)
+            </span>
+            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500 text-slate-950">Free</span>
+          </button>
+
           <button
             onClick={scrollToTop}
             className="w-full text-left block px-3 py-2 rounded-lg text-base font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -239,9 +261,14 @@ export default function Navbar() {
           )}
         </div>
       )}
-          {showProfileDrawer && (
+      {showProfileDrawer && (
         <ProfileDrawerModal onClose={() => setShowProfileDrawer(false)} />
       )}
+      {/* Direct Mobile App Download Modal */}
+      <DownloadAppModal
+        isOpen={showDownloadModal}
+        onClose={() => setShowDownloadModal(false)}
+      />
     </header>
   );
 }
