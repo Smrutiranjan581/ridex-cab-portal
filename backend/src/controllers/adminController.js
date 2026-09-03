@@ -170,18 +170,33 @@ exports.getAllBookings = async (req, res) => {
 exports.approveCaptain = async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await User.findById(id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "Captain not found" });
-    }
-    user.isApproved = true;
-    user.status = "available";
-    await user.save();
+    let user = null;
+    try {
+      user = await User.findById(id);
+    } catch (e) {}
 
-    await CaptainProfile.findOneAndUpdate(
-      { user: id },
-      { status: "available" }
-    );
+    if (!user) {
+      try {
+        const capProf = await CaptainProfile.findById(id);
+        if (capProf && capProf.user) {
+          user = await User.findById(capProf.user);
+        }
+      } catch (e) {}
+    }
+
+    if (user) {
+      user.isApproved = true;
+      user.isRejected = false;
+      user.status = "available";
+      await user.save();
+
+      await CaptainProfile.findOneAndUpdate(
+        { user: user._id },
+        { status: "available", isApproved: true }
+      );
+    } else {
+      await CaptainProfile.findByIdAndUpdate(id, { status: "available", isApproved: true });
+    }
 
     res.json({ success: true, message: "Captain approved successfully", user });
   } catch (err) {
@@ -193,19 +208,34 @@ exports.rejectCaptain = async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
-    const user = await User.findById(id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "Captain not found" });
-    }
-    user.isRejected = true;
-    user.status = "rejected";
-    user.rejectionReason = reason || "KYC verification failed.";
-    await user.save();
+    let user = null;
+    try {
+      user = await User.findById(id);
+    } catch (e) {}
 
-    await CaptainProfile.findOneAndUpdate(
-      { user: id },
-      { status: "rejected" }
-    );
+    if (!user) {
+      try {
+        const capProf = await CaptainProfile.findById(id);
+        if (capProf && capProf.user) {
+          user = await User.findById(capProf.user);
+        }
+      } catch (e) {}
+    }
+
+    if (user) {
+      user.isApproved = false;
+      user.isRejected = true;
+      user.status = "rejected";
+      user.rejectionReason = reason || "KYC verification failed.";
+      await user.save();
+
+      await CaptainProfile.findOneAndUpdate(
+        { user: user._id },
+        { status: "rejected", isApproved: false }
+      );
+    } else {
+      await CaptainProfile.findByIdAndUpdate(id, { status: "rejected", isApproved: false });
+    }
 
     res.json({ success: true, message: "Captain application rejected", user });
   } catch (err) {

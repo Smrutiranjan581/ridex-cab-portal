@@ -5,12 +5,14 @@ import {
   Landmark, UserCheck, ShieldCheck, Headphones, Sparkles 
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 
 export default function Notifications() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
+  const prevPendingCountRef = useRef(0);
 
   // Web Audio alert chime
   const playNotifChime = () => {
@@ -53,32 +55,70 @@ export default function Notifications() {
 
   const [notifications, setNotifications] = useState([]);
 
-  const loadNotifications = (triggerSound = false) => {
+  const loadNotifications = async (triggerSound = false) => {
     if (!user) return;
 
     if (user.role === 'admin') {
       const adminNotifs = [];
+      let pendingCapsList = [];
 
-      // 1. Live Pending Captain Registration Applications
+      // 1. Fetch live pending captains from Cloud Backend API
       try {
-        const usersRaw = localStorage.getItem('fleetcorp_registered_users');
-        if (usersRaw) {
-          const users = JSON.parse(usersRaw);
-          const pendingCaps = users.filter(u => u.role === 'captain' && (u.isApproved === false || u.status === 'pending_approval'));
-          pendingCaps.forEach(cap => {
-            adminNotifs.push({
-              id: 'app_' + (cap._id || cap.phone),
-              title: `🚨 Captain KYC Pending: ${cap.name}`,
-              desc: `${cap.vehicleDetails?.category?.toUpperCase() || 'VEHICLE'} (${cap.vehicleDetails?.numberPlate || 'OD-02-APPLIED'}) • ${cap.city || 'Bhubaneswar'} awaiting approval`,
+        const res = await api.get('/admin/captains');
+        if (res.data?.success && Array.isArray(res.data.captains)) {
+          const apiCaps = res.data.captains;
+          const pending = apiCaps.filter(c => {
+            const isApproved = c.isApproved === true || c.status === 'available' || c.status === 'active' || c.status === 'online';
+            const isRejected = c.isRejected === true || c.status === 'rejected';
+            return !isApproved && !isRejected;
+          });
+          pendingCapsList = pending.map(c => {
+            const u = c.user || c;
+            return {
+              id: 'app_api_' + (u._id || c._id || u.phone),
+              title: `🚨 Captain KYC Pending: ${u.name || 'New Driver'}`,
+              desc: `${c.vehicle?.category?.toUpperCase() || 'VEHICLE'} (${c.vehicle?.numberPlate || 'OD-02-APPLIED'}) • ${u.phone || ''} awaiting approval`,
               time: 'Action Required',
               icon: UserCheck,
               color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border border-amber-500/20',
               link: '/admin/approvals',
               isUrgent: true
-            });
+            };
           });
         }
       } catch (e) {}
+
+      // 2. Fallback check local registered captains (avoiding duplicates)
+      try {
+        const usersRaw = localStorage.getItem('fleetcorp_registered_users');
+        if (usersRaw) {
+          const users = JSON.parse(usersRaw);
+          const pendingLocal = users.filter(u => u.role === 'captain' && (u.isApproved === false || u.status === 'pending_approval'));
+          pendingLocal.forEach(cap => {
+            const alreadyInList = pendingCapsList.some(p => p.id.includes(cap._id || cap.phone));
+            if (!alreadyInList) {
+              pendingCapsList.push({
+                id: 'app_loc_' + (cap._id || cap.phone),
+                title: `🚨 Captain KYC Pending: ${cap.name}`,
+                desc: `${cap.vehicleDetails?.category?.toUpperCase() || 'VEHICLE'} (${cap.vehicleDetails?.numberPlate || 'OD-02-APPLIED'}) • ${cap.city || 'Bhubaneswar'} awaiting approval`,
+                time: 'Action Required',
+                icon: UserCheck,
+                color: 'text-amber-500 bg-amber-50 dark:bg-amber-950/40 border border-amber-500/20',
+                link: '/admin/approvals',
+                isUrgent: true
+              });
+            }
+          });
+        }
+      } catch (e) {}
+
+      adminNotifs.push(...pendingCapsList);
+
+      // Play chime if new pending captain arrived
+      if (pendingCapsList.length > prevPendingCountRef.current && prevPendingCountRef.current > 0) {
+        playNotifChime();
+      }
+      prevPendingCountRef.current = pendingCapsList.length;
 
       // 2. Live Pending Payouts
       try {
@@ -173,7 +213,12 @@ export default function Notifications() {
 
   useEffect(() => {
     loadNotifications(false);
-    window.addEventListener('storage', () => loadNotifications(true));
+    const interval = setInterval(() => {
+      loadNotifications(true);
+    }, 5000);
+
+    const handleStorage = () => loadNotifications(true);
+    window.addEventListener('storage', handleStorage);
 
     let channel;
     if ('BroadcastChannel' in window) {
@@ -187,7 +232,8 @@ export default function Notifications() {
     }
 
     return () => {
-      window.removeEventListener('storage', () => loadNotifications());
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorage);
       if (channel) channel.close();
     };
   }, [user]);

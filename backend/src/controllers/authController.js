@@ -91,12 +91,14 @@ exports.register = async (req, res) => {
             capacity: 1
           },
           licenseNumber: licenseNumber || "DL-APPLIED-2026",
-          status: "available"
+          status: "pending_approval",
+          isApproved: false
         });
       } catch (e) {
         profile = {
           vehicle: vehicleDetails || { category: "bike", model: "Hero Splendor", numberPlate: "OD-02-NEW-0001", capacity: 1 },
-          status: "available",
+          status: "pending_approval",
+          isApproved: false,
           rating: 5.0,
           todayEarnings: 0,
           totalTrips: 0

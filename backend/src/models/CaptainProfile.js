@@ -37,11 +37,10 @@ const captainProfileSchema = new mongoose.Schema(
       type: String,
       required: true,
       default: "DL-IND-2024-987654"
-    },
     status: {
       type: String,
-      enum: ["available", "on_trip", "offline"],
-      default: "available"
+      enum: ["available", "on_trip", "offline", "pending_approval", "rejected"],
+      default: "pending_approval"
     },
     currentLocation: {
       name: { type: String, default: "Tech Park Hub" },
@@ -50,23 +49,23 @@ const captainProfileSchema = new mongoose.Schema(
     },
     rating: {
       type: Number,
-      default: 4.9
+      default: 5.0
     },
     totalTrips: {
       type: Number,
-      default: 142
+      default: 0
     },
     todayEarnings: {
       type: Number,
-      default: 1850
+      default: 0
     },
     totalEarnings: {
       type: Number,
-      default: 48500
+      default: 0
     },
     isApproved: {
       type: Boolean,
-      default: true
+      default: false
     }
   },
   { timestamps: true }

@@ -69,6 +69,7 @@ export default function CaptainApprovals() {
     };
 
     fetchApiCaptains();
+    const interval = setInterval(fetchApiCaptains, 5000);
 
     const handleStorageSync = () => {
       try {
@@ -78,7 +79,10 @@ export default function CaptainApprovals() {
     };
 
     window.addEventListener('storage', handleStorageSync);
-    return () => window.removeEventListener('storage', handleStorageSync);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageSync);
+    };
   }, []);
 
   // Filter all captain registrations
