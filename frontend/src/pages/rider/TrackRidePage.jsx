@@ -73,35 +73,59 @@ export default function TrackRidePage() {
       };
     }
 
-    // 4. API fallback
+    // 4. Real-time Live Cloud API Polling (Every 1.5s for instant multi-device sync)
     const fetchBooking = async () => {
+      if (!id) return;
       try {
         const res = await api.get(`/bookings/${id}`);
-        if (res.data.success) {
-          setBooking(res.data.booking);
-          setStatus(res.data.booking.status);
-          if (res.data.booking.status === 'trip_completed') {
-            setShowReview(true);
+        if (res.data?.success && res.data.booking) {
+          const b = res.data.booking;
+          setBooking(prev => ({
+            ...prev,
+            ...b,
+            bookingId: b.bookingId || id,
+            _id: b._id || id,
+            pickup: typeof b.pickup === 'string' ? b.pickup : (b.pickup?.address || prev?.pickup || 'Pickup Location'),
+            drop: typeof b.drop === 'string' ? b.drop : (b.drop?.address || prev?.drop || 'Destination'),
+            fare: b.fare?.total || b.fare || prev?.fare || 180,
+            otp: b.otp || prev?.otp || '4921',
+            captain: b.captain || prev?.captain,
+            vehicle: b.vehicle || b.captainProfile?.vehicle || prev?.vehicle
+          }));
+          
+          if (b.status) {
+            setStatus(b.status);
+            if (b.status === 'trip_completed') {
+              setShowReview(true);
+            }
           }
         }
       } catch (err) {}
     };
+
     fetchBooking();
+    const cloudApiInterval = setInterval(fetchBooking, 1500);
 
     return () => {
       clearInterval(interval);
+      clearInterval(cloudApiInterval);
       window.removeEventListener('storage', handleStorageChange);
       if (channel) channel.close();
     };
   }, [id]);
 
-  const advanceStage = () => {
+  const advanceStage = async () => {
     const currentIndex = stages.indexOf(status);
     if (currentIndex < stages.length - 1) {
       const nextStatus = stages[currentIndex + 1];
       setStatus(nextStatus);
+      if (id) {
+        try {
+          await api.patch(`/bookings/${id}/status`, { status: nextStatus });
+        } catch (e) {}
+      }
       if (nextStatus === "trip_completed") {
-        setTimeout(() => setShowReview(true), 600);
+        setTimeout(() => setShowReview(true), 400);
       }
     }
   };

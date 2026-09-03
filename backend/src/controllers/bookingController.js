@@ -258,14 +258,16 @@ exports.updateBookingStatus = async (req, res) => {
     const { status, otp } = req.body;
     let booking = null;
     try {
-      booking = await Booking.findById(req.params.id);
+      booking = await Booking.findOne({
+        $or: [{ _id: req.params.id }, { bookingId: req.params.id }]
+      });
     } catch (e) {}
 
     if (!booking) {
       return res.json({
         success: true,
         message: `Status updated to ${status}`,
-        booking: { _id: req.params.id, status, otp: otp || "4921" }
+        booking: { _id: req.params.id, bookingId: req.params.id, status, otp: otp || "4921" }
       });
     }
 

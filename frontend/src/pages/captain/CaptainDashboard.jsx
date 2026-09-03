@@ -318,10 +318,21 @@ export default function CaptainDashboard() {
     } catch (e) {}
   };
 
-  const handleStartTrip = () => {
+  const handleStartTrip = async () => {
     if (!enteredOtp || enteredOtp === activeTrip?.otp) {
       setOtpError(false);
       setTripStage("trip_started");
+      
+      const targetId = activeTrip?._id || activeTrip?.bookingId;
+      if (targetId) {
+        try {
+          await api.patch(`/bookings/${targetId}/status`, { 
+            status: "trip_started", 
+            otp: enteredOtp || activeTrip?.otp 
+          });
+        } catch (e) {}
+      }
+
       try {
         const updated = { ...activeTrip, status: "trip_started" };
         localStorage.setItem('fleetcorp_live_active_trip', JSON.stringify(updated));
@@ -335,13 +346,21 @@ export default function CaptainDashboard() {
     }
   };
 
-  const handleCompleteTrip = () => {
+  const handleCompleteTrip = async () => {
     setTripStage("trip_completed");
     setStats(prev => ({
       ...prev,
       todayEarnings: prev.todayEarnings + (activeTrip?.fare || 150),
       totalTrips: prev.totalTrips + 1
     }));
+
+    const targetId = activeTrip?._id || activeTrip?.bookingId;
+    if (targetId) {
+      try {
+        await api.patch(`/bookings/${targetId}/status`, { status: "trip_completed" });
+      } catch (e) {}
+    }
+
     try {
       const updated = { ...activeTrip, status: "trip_completed" };
       localStorage.setItem('fleetcorp_live_active_trip', JSON.stringify(updated));
