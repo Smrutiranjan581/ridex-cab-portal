@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RideX Partner</string>
+    <string name="title_activity_main">RideX Partner</string>
+    <string name="package_name">com.ridex.captain</string>
+    <string name="custom_url_scheme">com.ridex.captain</string>
+</resources>
