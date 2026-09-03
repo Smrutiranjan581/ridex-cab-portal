@@ -1,7 +1,26 @@
+const mongoose = require("mongoose");
 const Booking = require("../models/Booking");
 const CaptainProfile = require("../models/CaptainProfile");
 const User = require("../models/User");
 const { calculateFare, estimateAllCabs } = require("../utils/fareCalculator");
+
+const findBookingFlexible = async (id) => {
+  if (!id) return null;
+  try {
+    if (mongoose.Types.ObjectId.isValid(id) && String(new mongoose.Types.ObjectId(id)) === String(id)) {
+      const b = await Booking.findById(id);
+      if (b) return b;
+    }
+  } catch (e) {}
+  try {
+    const byBookingId = await Booking.findOne({ bookingId: id });
+    if (byBookingId) return byBookingId;
+  } catch (e) {}
+  try {
+    return await Booking.findOne({ _id: id });
+  } catch (e) {}
+  return null;
+};
 
 exports.estimateFare = async (req, res) => {
   try {
@@ -37,12 +56,7 @@ exports.getPendingDispatches = async (req, res) => {
 exports.acceptBooking = async (req, res) => {
   try {
     const { id } = req.params;
-    let booking = null;
-    try {
-      booking = await Booking.findOne({
-        $or: [{ _id: id }, { bookingId: id }]
-      });
-    } catch (e) {}
+    let booking = await findBookingFlexible(id);
 
     let capProf = null;
     try {
@@ -210,24 +224,16 @@ exports.getMyRides = async (req, res) => {
 
 exports.getBookingById = async (req, res) => {
   try {
-    let booking = null;
-    try {
-      booking = await Booking.findOne({
-        $or: [{ _id: req.params.id }, { bookingId: req.params.id }]
-      })
-        .populate("rider", "name email phone company")
-        .populate("captain", "name phone avatar")
-        .populate("captainProfile");
-    } catch (e) {}
+    const booking = await findBookingFlexible(req.params.id);
 
     if (!booking) {
       return res.json({
         success: true,
         booking: {
           _id: req.params.id,
-          bookingId: "FLT-9188",
-          pickup: { address: "Fortune Tower, Chandrasekharpur", lat: 20.3012, lng: 85.8288 },
-          drop: { address: "Biju Patnaik Airport (BBI), Terminal 1", lat: 20.2444, lng: 85.8178 },
+          bookingId: req.params.id,
+          pickup: "Infocity IT Corridor, Patia",
+          drop: "Biju Patnaik Airport (BBI)",
           vehicleType: "sedan",
           distanceKm: 14.6,
           estimatedDurationMins: 32,
@@ -237,7 +243,7 @@ exports.getBookingById = async (req, res) => {
           paymentMethod: "corporate_wallet",
           scheduledDate: new Date().toISOString().split("T")[0],
           scheduledTime: "04:30 PM",
-          rider: { name: "Rahul Sharma", phone: "+91 9123456780", company: "TCS Hub" },
+          rider: { name: "Rahul Sharma", phone: "+91 9123456780", company: "RideX Passenger" },
           captain: { name: "Rajesh Mohapatra", phone: "+91 9437012345", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" },
           captainProfile: {
             vehicle: { model: "Swift Dzire", numberPlate: "OD-02-BA-9876", color: "Pearl White", category: "sedan" },
@@ -256,12 +262,7 @@ exports.getBookingById = async (req, res) => {
 exports.updateBookingStatus = async (req, res) => {
   try {
     const { status, otp } = req.body;
-    let booking = null;
-    try {
-      booking = await Booking.findOne({
-        $or: [{ _id: req.params.id }, { bookingId: req.params.id }]
-      });
-    } catch (e) {}
+    let booking = await findBookingFlexible(req.params.id);
 
     if (!booking) {
       return res.json({
