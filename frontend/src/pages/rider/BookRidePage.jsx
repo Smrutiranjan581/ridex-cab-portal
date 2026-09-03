@@ -123,6 +123,10 @@ export default function BookRidePage() {
       existingNotifs.unshift(newNotif);
       localStorage.setItem(notifKey, JSON.stringify(existingNotifs));
 
+      // 4. Update rider trips count for welcome discount eligibility
+      const prevTrips = Number(localStorage.getItem(`ridex_rider_trips_count_${userKey}`) || 0);
+      localStorage.setItem(`ridex_rider_trips_count_${userKey}`, String(prevTrips + 1));
+
       if ('BroadcastChannel' in window) {
         const channel = new BroadcastChannel('ridex_dispatch_channel');
         channel.postMessage({ type: 'WALLET_BALANCE_UPDATED', walletBalance: remainingBal, notification: newNotif });

@@ -44,15 +44,19 @@ export default function RiderDashboard() {
     const fetchRides = async () => {
       try {
         const res = await api.get('/bookings/my-rides');
-        if (res.data.success) {
+        if (res.data.success && Array.isArray(res.data.rides)) {
           setRides(res.data.rides);
+          const userKey = (user?.email || user?.phone || 'guest').toLowerCase();
+          if (res.data.rides.length > 0) {
+            localStorage.setItem(`ridex_rider_trips_count_${userKey}`, String(res.data.rides.length));
+          }
         }
       } catch (err) {
         console.log("Using demo fallback rides");
       }
     };
     fetchRides();
-  }, []);
+  }, [user]);
 
   const completedCount = rides.filter(r => r.status === 'trip_completed').length || 8;
   const activeRide = rides.find(r => ['captain_assigned', 'captain_arriving', 'trip_started'].includes(r.status));
