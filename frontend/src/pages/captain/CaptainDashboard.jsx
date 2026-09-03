@@ -137,6 +137,27 @@ export default function CaptainDashboard() {
     };
   }, [user]);
 
+  // Sound & Vibration for incoming ride alert
+  const playIncomingRideAlertSound = () => {
+    try {
+      if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.35);
+      gain.gain.setValueAtTime(0.6, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch (e) {}
+  };
+
   // Listen for Real Ride Bookings from Riders (both from Cloud Backend API and local)
   useEffect(() => {
     if (!isOnline || activeTrip) {
@@ -144,27 +165,36 @@ export default function CaptainDashboard() {
       return;
     }
 
+    let lastKnownReqId = null;
+
     const checkPendingRequests = async () => {
       // 1. Fetch live cloud pending dispatches from MongoDB
       try {
         const res = await api.get('/bookings/pending-dispatch');
         if (res.data?.success && Array.isArray(res.data.dispatches) && res.data.dispatches.length > 0) {
           const latest = res.data.dispatches[0];
+          const reqId = latest.bookingId || latest._id;
           const dispatchPayload = {
-            id: latest.bookingId || latest._id,
+            id: reqId,
             _id: latest._id,
-            pickup: typeof latest.pickup === 'string' ? latest.pickup : latest.pickup?.address,
-            drop: typeof latest.drop === 'string' ? latest.drop : latest.drop?.address,
-            fare: latest.fare?.total || latest.fare,
-            distanceKm: latest.distanceKm,
+            pickup: typeof latest.pickup === 'string' ? latest.pickup : (latest.pickup?.address || "Pickup Point"),
+            drop: typeof latest.drop === 'string' ? latest.drop : (latest.drop?.address || "Destination Point"),
+            fare: latest.fare?.total || latest.fare || 150,
+            distanceKm: latest.distanceKm || 10,
             category: latest.vehicleType === 'bike' ? 'Bike Moto' : latest.vehicleType === 'auto' ? 'Auto TukTuk' : 'Sedan Prime',
-            vehicleType: latest.vehicleType,
-            riderName: latest.rider?.name || "Corporate Rider",
-            riderPhone: latest.rider?.phone || "+91 9437088776",
+            vehicleType: latest.vehicleType || "sedan",
+            riderName: latest.riderDetails?.name || latest.rider?.name || "Corporate Rider",
+            riderPhone: latest.riderDetails?.phone || latest.rider?.phone || "+91 9437088776",
             status: "pending_acceptance",
             otp: latest.otp || "4921",
             createdAt: latest.createdAt
           };
+          
+          if (lastKnownReqId !== reqId) {
+            lastKnownReqId = reqId;
+            playIncomingRideAlertSound();
+          }
+
           setIncomingRequest(dispatchPayload);
           return;
         }
@@ -176,6 +206,10 @@ export default function CaptainDashboard() {
         if (storedReq) {
           const parsed = JSON.parse(storedReq);
           if (parsed && parsed.status === 'pending_acceptance') {
+            if (lastKnownReqId !== parsed.id) {
+              lastKnownReqId = parsed.id;
+              playIncomingRideAlertSound();
+            }
             setIncomingRequest(parsed);
           }
         }
@@ -185,8 +219,8 @@ export default function CaptainDashboard() {
     // 1. Initial check
     checkPendingRequests();
 
-    // 2. Poll Cloud API every 2.5s for live cross-device dispatch
-    const pollInterval = setInterval(checkPendingRequests, 2500);
+    // 2. Poll Cloud API every 2 seconds for live cross-device dispatch
+    const pollInterval = setInterval(checkPendingRequests, 2000);
 
     // 3. Listen to cross-window storage events
     const handleStorageChange = (e) => {
@@ -202,6 +236,7 @@ export default function CaptainDashboard() {
       channel = new BroadcastChannel('ridex_dispatch_channel');
       channel.onmessage = (event) => {
         if (event.data?.type === 'NEW_DISPATCH_REQUEST' && event.data?.data) {
+          playIncomingRideAlertSound();
           setIncomingRequest(event.data.data);
         } else if (event.data?.type === 'CANCEL_DISPATCH_REQUEST') {
           setIncomingRequest(null);

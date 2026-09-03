@@ -10,15 +10,15 @@ const {
   getPendingDispatches,
   acceptBooking
 } = require("../controllers/bookingController");
-const { protect } = require("../middleware/authMiddleware");
+const { protectOptional } = require("../middleware/authMiddleware");
 
 router.post("/estimate", estimateFare);
-router.post("/create", protect, createBooking);
-router.get("/pending-dispatch", protect, getPendingDispatches);
-router.put("/:id/accept", protect, acceptBooking);
-router.get("/my-rides", protect, getMyRides);
-router.get("/:id", protect, getBookingById);
-router.patch("/:id/status", protect, updateBookingStatus);
-router.patch("/:id/cancel", protect, cancelBooking);
+router.post("/create", protectOptional, createBooking);
+router.get("/pending-dispatch", protectOptional, getPendingDispatches);
+router.put("/:id/accept", protectOptional, acceptBooking);
+router.get("/my-rides", protectOptional, getMyRides);
+router.get("/:id", protectOptional, getBookingById);
+router.patch("/:id/status", protectOptional, updateBookingStatus);
+router.patch("/:id/cancel", protectOptional, cancelBooking);
 
 module.exports = router;
